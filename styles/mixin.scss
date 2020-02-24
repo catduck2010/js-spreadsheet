@@ -1,3 +1,8 @@
 @mixin cellHeight{
   height: 30px;
 }
+@mixin commonGrid{
+  display: grid;
+  grid-column-gap: 0;
+  grid-row-gap: 0;
+}
