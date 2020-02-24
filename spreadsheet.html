@@ -44,15 +44,15 @@
 
     <div class="edit-bar">
         <input class="locator" id="locator" type="text" value="A1">
-        <button class="button edit-button red"><strong>✗</strong></button>
-        <button class="button edit-button green"><strong>✓</strong></button>
-        <button class="button edit-button"><strong>=</strong></button>
+        <button class="button edit-button red disabled-button"><strong>✗</strong></button>
+        <button class="button edit-button green disabled-button"><strong>✓</strong></button>
+        <button class="button edit-button disabled-button"><strong>=</strong></button>
         <input class="edit-area" id="text-edit" type="text">
     </div>
 
     <div class="table-head upper-grid" style="background: gray">
         <div class="corner-div">
-            <button class="button sheet-button corner-button">⌘</button>
+            <button class="button sheet-button corner-button" id="corner-btn">⌘</button>
         </div>
         <div class="column-bar" id="new-col-bar">
             <table id="sticky-col-bar">
