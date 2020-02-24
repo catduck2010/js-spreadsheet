@@ -1,3 +1,4 @@
+const rxjs = require('rxjs');
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -25,7 +26,7 @@ class Sheet {
         for (let i = 0; i < rows; i++) {
             let temp = [];
             for (let j = 0; j < cols; j++) {
-                temp.push(new SheetCell("1"));
+                temp.push(new SheetCell(""));
             }
             this.board.push(temp);
         }
@@ -136,6 +137,7 @@ class SheetTable {
         this.textedit = document.getElementById('text-edit');
         this.sheet = new Sheet(row, col);
         this.rowBar = document.getElementById('left-row-bar');
+        this.colBar = document.getElementById('sticky-col-bar');
         this.table = document.getElementById('sheet-table');
         // console.log(document.getElementById('left-row-bar'));
         // console.log(this.table);
@@ -186,11 +188,11 @@ class SheetTable {
 
     writeRowBar() {
         let str = "";
-        for (let i = 0; i < this.sheet.rowNum; i++) {
+        for (let i = -1; i < this.sheet.rowNum; i++) {
             str += '<button class="button sheet-button row-button">' + (i + 1) + '</button>';
         }
         this.rowBar.innerHTML = str;
-        console.log(str);
+        //console.log(str);
     }
 
     writeColBar() {
@@ -199,27 +201,27 @@ class SheetTable {
             str += '<td><button class="button sheet-button column-button">' + this.sheet.index2letter(i) + '</button></td>';
         }
         str += '</tr>';
+        this.colBar.innerHTML = str;
         return str;
     }
 
     writeTable() {
         this.writeRowBar();
-        let str = this.writeColBar();
-        let board = this.sheet.getStrBoard();
+        let innerStr = this.writeColBar();
+        let board = this.sheet.board;
         board.forEach(function (row) {
             let temp = '<tr>';
             row.forEach(function (cell) {
                 let str = cell.str;
-                if (str == null || str == undefined || str.length === 0) {
-                    temp += '<td></td>'
-                } else {
-                    temp += '<td>' + cell.str + '</td>'
-                }
+
+                temp += '<td>' + cell.str + '</td>'
+
             });
             temp += '</tr>';
-            str += temp;
+            innerStr += temp;
         });
-        this.table.innerHTML = str;
+        //console.log(innerStr);
+        this.table.innerHTML = innerStr;
     }
 }
 
@@ -273,15 +275,36 @@ window.onclick = function (e) {
     }
 };
 
+const syncScroll = function () {
+    let down = document.querySelector('#sheet-div');
+    let up = document.querySelector('#new-col-bar');
+    const syncUp = function () {
+        down.scrollLeft = up.scrollLeft;
+    };
+    const syncDown = function () {
+        up.scrollLeft = down.scrollLeft;
+    }
+    up.addEventListener('mouseover', function () {
+        down.removeEventListener('scroll', syncDown);
+        up.addEventListener('scroll', syncUp);
+    });
+    down.addEventListener('mouseover', function () {
+        up.removeEventListener('scroll', syncUp);
+        down.addEventListener('scroll', syncDown);
+    });
+};
+
 
 const newFile = function () {
     hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
-        document.sheetTable = new SheetTable(100, 12);
+        document.sheetTable = new SheetTable(30, 27);
     }
 };
 
-document.sheetTable = new SheetTable(15, 12);
+document.sheetTable = new SheetTable(30, 27);
+syncScroll();
+
 
 
 
