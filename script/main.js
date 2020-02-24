@@ -1,4 +1,4 @@
-const rxjs = require('rxjs');
+//const rxjs = require('rxjs');
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -13,6 +13,7 @@ Array.prototype.remove = function (index) {
 
 class SheetCell {
     constructor(str) {
+        this.cell = null;
         this.formula = null;
         this.str = str;
     }
@@ -26,7 +27,7 @@ class Sheet {
         for (let i = 0; i < rows; i++) {
             let temp = [];
             for (let j = 0; j < cols; j++) {
-                temp.push(new SheetCell(""));
+                temp.push(new SheetCell("01234567890123456789"));
             }
             this.board.push(temp);
         }
@@ -53,7 +54,7 @@ class Sheet {
 
     addColumnWithNum(at) {
         this.board.forEach(function (row) {
-            row.insert(at, new SheetCell(" ".trim()));
+            row.insert(at, new SheetCell(""));
         });
         this.colNum++;
     }
@@ -131,8 +132,10 @@ class Sheet {
 
 class SheetTable {
     constructor(row, col) {
-        this.x = 0;
+        this.x = 1;
         this.y = 'A';
+        this.flags = [false, false];
+        // row selected, column selected
         this.locator = document.getElementById('locator');
         this.textedit = document.getElementById('text-edit');
         this.sheet = new Sheet(row, col);
@@ -142,7 +145,178 @@ class SheetTable {
         // console.log(document.getElementById('left-row-bar'));
         // console.log(this.table);
         this.writeTable();
+        this.toggleSelect(1, 'A');
+        this.rowBtns = this.getRowButtons();
+        this.colBtns = this.getColButtons();
+        this.cornerBtn = this.getCornerBtn();
     }
+
+    getCornerBtn() {
+        let btn = document.getElementById('corner-btn');
+        let sheetTable = this;
+        btn.addEventListener("click", function () {
+            sheetTable.selectAll();
+        });
+        return btn;
+    }
+
+    getRowButtons() {
+        let res = [];
+        let sheetTable = this;
+        for (let i = 1; i <= this.sheet.rowNum; i++) {
+            let btn = document.getElementById('row-btn-' + i);
+
+            btn.addEventListener("click", function () {
+                sheetTable.selectRow(i);
+            });
+            res.push(btn);
+        }
+        return res;
+    }
+
+    getColButtons() {
+        let res = [];
+        let sheetTable = this;
+        for (let i = 0; i < this.sheet.colNum; i++) {
+            let letter = this.sheet.index2letter(i);
+            let btn = document.getElementById('col-btn-' + letter);
+            btn.addEventListener("click", function () {
+                sheetTable.selectCol(letter);
+            });
+            res.push(btn);
+        }
+        return res;
+    }
+
+    toggleSelect(x, y) {
+        let cell = document.getElementById(y + '-cell-' + x).parentElement;
+        let col = document.getElementById('col-btn-' + y).parentElement;
+        let row = document.getElementById('row-btn-' + x);
+        col.classList.toggle('selected-row-col');
+        row.classList.toggle('selected-row-col');
+        cell.classList.toggle('selected-cell');
+    }
+
+    select(x, y) {
+        this.unselect();
+        this.x = x;
+        this.y = y;
+        this.toggleSelect(x, y);
+        this.flags = [false, false];
+    }
+
+    selectRow(x) {
+        this.unselect();
+        this.colBtns.forEach(function (btn) {
+            btn.parentElement.classList.add('selected-row-col');
+        });
+        let row = document.getElementById('row-btn-' + x);
+        row.classList.add('selected-row-col');
+        for (let j = 0; j < this.sheet.colNum; j++) {
+            let cell = document.getElementById(
+                this.sheet.index2letter(j) + '-cell-' + x)
+                .parentElement;
+            cell.classList.add('selected-cell');
+        }
+        this.x = x;
+        this.y = 'A';
+        this.flags = [true, false];
+    }
+
+    selectCol(y) {
+        this.unselect();
+        this.rowBtns.forEach(function (btn) {
+            btn.classList.add('selected-row-col');
+        });
+        let col = document.getElementById('col-btn-' + y).parentElement;
+        col.classList.add('selected-row-col');
+        for (let i = 1; i <= this.sheet.rowNum; i++) {
+            let cell = document.getElementById(
+                y + '-cell-' + i)
+                .parentElement;
+            cell.classList.add('selected-cell');
+        }
+        this.x = 1;
+        this.y = y;
+        this.flags = [false, true];
+    }
+
+    selectAll() {
+        this.unselect();
+        this.rowBtns.forEach(function (btn) {
+            btn.classList.add('selected-row-col');
+        });
+        this.colBtns.forEach(function (btn) {
+            btn.parentElement.classList.add('selected-row-col');
+        });
+        for (let i = 1; i <= this.sheet.rowNum; i++) {
+            for (let j = 0; j < this.sheet.colNum; j++) {
+                let cell = document.getElementById(
+                    this.sheet.index2letter(j) + '-cell-' + i)
+                    .parentElement;
+                cell.classList.add('selected-cell');
+            }
+        }
+        this.x = 1;
+        this.y = 'A';
+        this.flags = [true, true];
+    }
+
+    unselect() {
+        if (this.flags[0] === true) {
+            if (this.flags[1] === true) {
+                // all selected
+                this.rowBtns.forEach(function (btn) {
+                    btn.classList.remove('selected-row-col');
+                });
+                this.colBtns.forEach(function (btn) {
+                    btn.parentElement.classList.remove('selected-row-col');
+                });
+                for (let i = 1; i <= this.sheet.rowNum; i++) {
+                    for (let j = 0; j < this.sheet.colNum; j++) {
+                        let cell = document.getElementById(
+                            this.sheet.index2letter(j) + '-cell-' + i)
+                            .parentElement;
+                        cell.classList.remove('selected-cell');
+                    }
+                }
+            } else {
+                // a row is selected
+                this.colBtns.forEach(function (btn) {
+                    btn.parentElement.classList.remove('selected-row-col');
+                });
+                let row = document.getElementById('row-btn-' + this.x);
+                row.classList.remove('selected-row-col');
+                for (let j = 0; j < this.sheet.colNum; j++) {
+                    let cell = document.getElementById(
+                        this.sheet.index2letter(j) + '-cell-' + this.x)
+                        .parentElement;
+                    cell.classList.remove('selected-cell');
+                }
+            }
+
+        } else {
+            if (this.flags[1] === true) {
+                // a column is selected
+                this.rowBtns.forEach(function (btn) {
+                    btn.classList.remove('selected-row-col');
+                });
+                let col = document.getElementById('col-btn-' + this.y).parentElement;
+                col.classList.remove('selected-row-col');
+                for (let i = 1; i <= this.sheet.rowNum; i++) {
+                    let cell = document.getElementById(
+                        this.y + '-cell-' + i)
+                        .parentElement;
+                    cell.classList.remove('selected-cell');
+                }
+
+            } else {
+                // a cell is selected
+                this.toggleSelect(this.x, this.y);
+            }
+        }
+    }
+
 
     getCur() {
         let res = [];
@@ -189,7 +363,7 @@ class SheetTable {
     writeRowBar() {
         let str = "";
         for (let i = -1; i < this.sheet.rowNum; i++) {
-            str += '<button class="button sheet-button row-button">' + (i + 1) + '</button>';
+            str += '<button class="button sheet-button row-button" id="row-btn-' + (i + 1) + '">' + (i + 1) + '</button>';
         }
         this.rowBar.innerHTML = str;
         //console.log(str);
@@ -197,31 +371,46 @@ class SheetTable {
 
     writeColBar() {
         let str = '<tr class="bg-lightgray">';
+        let str2 = '<tr class="bg-lightgray">';
         for (let i = 0; i < this.sheet.colNum; i++) {
-            str += '<td><button class="button sheet-button column-button">' + this.sheet.index2letter(i) + '</button></td>';
+            let temp = '<td><button class="button sheet-button column-button" id="col-btn-'
+                + this.sheet.index2letter(i) + '">'
+                + this.sheet.index2letter(i) + '</button></td>';
+            let temp2 = '<td><button class="button sheet-button column-button">'
+                + this.sheet.index2letter(i) + '</button></td>';
+            str += temp;
+            str2 += temp2;
         }
         str += '</tr>';
+        str2 += '</tr>';
         this.colBar.innerHTML = str;
-        return str;
+        return str2;
     }
 
     writeTable() {
         this.writeRowBar();
         let innerStr = this.writeColBar();
-        let board = this.sheet.board;
-        board.forEach(function (row) {
+        let sheet = this.sheet;
+        let board = sheet.board;
+        let sheetTable = this;
+        for (let i = 0; i < sheet.rowNum; i++) {
             let temp = '<tr>';
-            row.forEach(function (cell) {
-                let str = cell.str;
+            for (let j = 0; j < sheet.colNum; j++) {
+                let cell = board[i][j];
 
-                temp += '<td>' + cell.str + '</td>'
-
-            });
+                temp += '<td><div class="cell-div" ' +
+                    'id="' + sheet.index2letter(j) + '-cell-' + (i + 1) + '">' + cell.str + '</div></td>';
+            }
             temp += '</tr>';
             innerStr += temp;
-        });
+        }
+
         //console.log(innerStr);
         this.table.innerHTML = innerStr;
+    }
+
+    flushTable() {
+
     }
 }
 
@@ -283,7 +472,7 @@ const syncScroll = function () {
     };
     const syncDown = function () {
         up.scrollLeft = down.scrollLeft;
-    }
+    };
     up.addEventListener('mouseover', function () {
         down.removeEventListener('scroll', syncDown);
         up.addEventListener('scroll', syncUp);
@@ -292,19 +481,35 @@ const syncScroll = function () {
         up.removeEventListener('scroll', syncUp);
         down.addEventListener('scroll', syncDown);
     });
+    up.addEventListener('scroll', syncUp);
+    down.addEventListener('scroll', syncDown);
 };
 
 
 const newFile = function () {
     hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
-        document.sheetTable = new SheetTable(30, 27);
+        document.sheetTable = new SheetTable(100, 27);
     }
 };
 
-document.sheetTable = new SheetTable(30, 27);
+document.sheetTable = new SheetTable(100, 27);
+document.sheetTable.locator.addEventListener("keyup", function (event) {
+    if (event.keyCode === 13) {
+        console.log('Pressed');
+        this.blur();
+    }
+})
 syncScroll();
+let enterPress = function (e) {
+    let keyCode = null;
+    if (e.which) keyCode = e.which; else if (e.keyCode) keyCode = e.keyCode;
+    if (keyCode == 13) {
+        return false;
+    }
+    return true;
 
+};
 
 
 

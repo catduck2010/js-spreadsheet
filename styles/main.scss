@@ -299,3 +299,23 @@ table {
 .table-cell {
   width: 80px;
 }
+
+.cell-div {
+  font-family: Arial, sans-serif;
+  display: inline-block;
+  width: 80px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.disabled-button{
+  color: gray;
+}
+
+.selected-row-col{
+  background: forestgreen;
+}
+
+.selected-cell{
+  background: rgba(142, 255, 32, 0.5);
+}
