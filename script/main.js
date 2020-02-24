@@ -20,12 +20,12 @@ class SheetCell {
 class Sheet {
     constructor(rows, cols) {
         this.board = [];
-        this._rowNum = rows;
-        this._colNum = cols;
+        this.rowNum = rows;
+        this.colNum = cols;
         for (let i = 0; i < rows; i++) {
             let temp = [];
             for (let j = 0; j < cols; j++) {
-                temp.push(new SheetCell(""));
+                temp.push(new SheetCell("1"));
             }
             this.board.push(temp);
         }
@@ -33,32 +33,37 @@ class Sheet {
 
     addRow(at) {
         let temp = [];
-        for (let i = 0; i < this._colNum; i++) {
+        for (let i = 0; i < this.colNum; i++) {
             temp.push(new SheetCell(""));
         }
         this.board.insert(at, temp);
-        this._rowNum++;
+        this.rowNum++;
     }
 
     addColumn(at) {//at as before, at+1 as after
-        at = this._letter2index(at);
+        at = this.letter2index(at);
         this.addColumnWithNum(at);
+    }
+
+    addColumnAfter(at) {
+        at = this.letter2index(at);
+        this.addColumnWithNum(at + 1);
     }
 
     addColumnWithNum(at) {
         this.board.forEach(function (row) {
-            row.insert(at, new SheetCell(""));
+            row.insert(at, new SheetCell(" ".trim()));
         });
-        this._colNum++;
+        this.colNum++;
     }
 
     delRow(at) {
         this.board.remove(at);
-        this._rowNum--;
+        this.rowNum--;
     }
 
     delColumn(at) {
-        at = this._letter2index(at);
+        at = this.letter2index(at);
         this.delColumnWithNum(at);
     }
 
@@ -66,12 +71,12 @@ class Sheet {
         this.board.forEach(function (row) {
             row.remove(at);
         });
-        this._colNum--;
+        this.colNum--;
     }
 
     getCell(row, col) {
         let x = row;
-        let y = this._letter2index(col);
+        let y = this.letter2index(col);
 
         return this.board[x][y];
     }
@@ -94,13 +99,12 @@ class Sheet {
 
     toCSV() {
         let rows = this.getStrBoard();
-        let csvContent = "data:text/csv;charset=utf-8,"
+        return "data:text/csv;charset=utf-8,"
             + rows.map(e => e.join(",")).join("\n");
-        return csvContent;
     }
 
 
-    _letter2index(letter) {
+    letter2index(letter) {
         let str = letter.toUpperCase();
         let num = 0, increase = 0;
         for (let i = str.length - 1; i >= 0; i--) {
@@ -110,7 +114,115 @@ class Sheet {
         //console.log(num);
         return num;
     }
+
+    index2letter(n) {
+        const ordA = 'A'.charCodeAt(0);
+        const ordZ = 'Z'.charCodeAt(0);
+        const len = ordZ - ordA + 1;
+        let s = "";
+        while (n >= 0) {
+            s = String.fromCharCode(n % len + ordA) + s;
+            n = Math.floor(n / len) - 1;
+        }
+        return s;
+    }
 }
+
+class SheetTable {
+    constructor(row, col) {
+        this.x = 0;
+        this.y = 'A';
+        this.locator = document.getElementById('locator');
+        this.textedit = document.getElementById('text-edit');
+        this.sheet = new Sheet(row, col);
+        this.rowBar = document.getElementById('left-row-bar');
+        this.table = document.getElementById('sheet-table');
+        // console.log(document.getElementById('left-row-bar'));
+        // console.log(this.table);
+        this.writeTable();
+    }
+
+    getCur() {
+        let res = [];
+        let label = this.locator.value;
+        let start = 0;
+        while (!(label.charCodeAt(start) <= '9'.charCodeAt(0)
+            && label.charCodeAt(start) >= '0'.charCodeAt(0))
+        && start < label.length) {
+            start++;
+        }
+        if (start === label.length) return [];
+        return [Number.parseInt(label.substring(start)) - 1, label.substring(0, start)];
+    }
+
+    addRow(at) {
+        this.sheet.addRow(at);
+        this.writeTable();
+    }
+
+    addRowAfter(at) {
+        this.addRow(at + 1);
+    }
+
+    addColumn(at) {
+        this.sheet.addColumn(at);
+        this.writeTable();
+    }
+
+    addColumnAfter(at) {
+        this.sheet.addColumnAfter(at);
+        this.writeTable();
+    }
+
+    deleteRow(at) {
+        this.sheet.delRow(at);
+        this.writeTable();
+    }
+
+    deleteColumn(at) {
+        this.sheet.delColumn(at);
+        this.writeTable();
+    }
+
+    writeRowBar() {
+        let str = "";
+        for (let i = 0; i < this.sheet.rowNum; i++) {
+            str += '<button class="button sheet-button row-button">' + (i + 1) + '</button>';
+        }
+        this.rowBar.innerHTML = str;
+        console.log(str);
+    }
+
+    writeColBar() {
+        let str = '<tr class="bg-lightgray">';
+        for (let i = 0; i < this.sheet.colNum; i++) {
+            str += '<td><button class="button sheet-button column-button">' + this.sheet.index2letter(i) + '</button></td>';
+        }
+        str += '</tr>';
+        return str;
+    }
+
+    writeTable() {
+        this.writeRowBar();
+        let str = this.writeColBar();
+        let board = this.sheet.getStrBoard();
+        board.forEach(function (row) {
+            let temp = '<tr>';
+            row.forEach(function (cell) {
+                let str = cell.str;
+                if (str == null || str == undefined || str.length === 0) {
+                    temp += '<td></td>'
+                } else {
+                    temp += '<td>' + cell.str + '</td>'
+                }
+            });
+            temp += '</tr>';
+            str += temp;
+        });
+        this.table.innerHTML = str;
+    }
+}
+
 
 let testFunction = function () {
     let sheet = new Sheet(5, 5,);
@@ -124,7 +236,6 @@ let testFunction = function () {
     console.log(sheet.getStrBoard());
 };
 
-document.sheet = new Sheet(10, 10);
 
 // click to switch between showing and hiding
 function showMenu(elementId) {
@@ -162,12 +273,15 @@ window.onclick = function (e) {
     }
 };
 
+
 const newFile = function () {
     hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
-        document.sheet = new Sheet(10, 10);
+        document.sheetTable = new SheetTable(100, 12);
     }
 };
+
+document.sheetTable = new SheetTable(15, 12);
 
 
 

@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SpreadSheet</title>
+    <title>Spreadsheet</title>
     <link rel="stylesheet" href="dist/main.css">
-    <script src="script/main.js"></script>
+    <script src="script/main.js" defer="true"></script>
 </head>
 <body>
-<header>
+<header class="sticky">
     <div class="nav-bar">
         <div class="nav-item dropdown">
             <button class="drop-btn button nav-item" onclick="showMenu('file2-menu')">File</button>
@@ -23,11 +23,11 @@
         <div class="nav-item dropdown">
             <button class="drop-btn button nav-item" onclick="showMenu('edit-menu')">Edit</button>
             <div class="dropdown-content" id="edit-menu">
-                <a href="#">Insert Row <b>above</b></a>
-                <a href="#">Insert Row <b>below</b></a>
+                <a href="#" onclick="document.sheetTable.addRow(0)">Insert Row <b>above</b></a>
+                <a href="#" onclick="document.sheetTable.addRowAfter(0)">Insert Row <b>below</b></a>
                 <hr>
-                <a href="#">Insert Column <b>left</b></a>
-                <a href="#">Insert Column <b>right</b></a>
+                <a href="#" onclick="document.sheetTable.addColumn('A')">Insert Column <b>left</b></a>
+                <a href="#" onclick="document.sheetTable.addColumnAfter('A')">Insert Column <b>right</b></a>
                 <hr>
                 <a href="#">Delete Row...</a>
                 <a href="#">Delete Column...</a>
@@ -43,18 +43,27 @@
 
 
     <div class="edit-bar">
-        <input class="locator" type="text" value="A1">
+        <input class="locator" id="locator" type="text" value="A1">
         <button class="button edit-button red"><strong>✗</strong></button>
         <button class="button edit-button green"><strong>✓</strong></button>
         <button class="button edit-button"><strong>=</strong></button>
-        <input class="edit-area" type="text">
+        <input class="edit-area" id="text-edit" type="text">
     </div>
 </header>
-<main>
-    <div class="spreadsheet">
 
+<div class="spreadsheet grids" id="spreadsheet">
+    <div class="corner-div">
+        <button class="button sheet-button corner-button">⌘</button>
     </div>
-</main>
+    <div class="row-bar" id="left-row-bar">
+    </div>
+    <div class="sheet-div">
+        <table id="sheet-table">
+
+        </table>
+    </div>
+</div>
+
 <footer>
 
 </footer>
