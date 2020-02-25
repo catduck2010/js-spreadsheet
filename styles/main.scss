@@ -148,6 +148,7 @@ button {
   box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
   z-index: 1;
   border-radius: 5px;
+  transition: 0.3s;
 }
 
 .dropdown-content a {
@@ -158,10 +159,12 @@ button {
   text-decoration: none;
   display: block;
   text-align: left;
+  transition: 0.3s;
 }
 
 .dropdown-content a:hover {
   background-color: #ddd;
+  transition: 0.3s;
 }
 
 .show {
@@ -329,10 +332,12 @@ table {
 .selected-row-col {
   color: white;
   background: forestgreen;
+  transition: 0.3s;
 }
 
 .selected-row-col:hover {
   color: black;
+  transition: 0.3s;
 }
 
 .selected-row-col > button {
@@ -344,6 +349,6 @@ table {
 }
 
 .selected-cell {
-
+  transition: 0.3s;
   background: rgba(142, 255, 32, 0.5);
 }
