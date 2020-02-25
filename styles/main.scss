@@ -1,6 +1,5 @@
 /*import 4 fonts from Google fonts*/
 @import url('https://fonts.googleapis.com/css?family=Noto+Sans+HK|Open+Sans|Noto+Sans+JP|Noto+Sans+KR&display=swap');
-@import "sheet";
 @import "mixin";
 
 $myFont: 'Open Sans', 'Noto Sans HK', 'Noto Sans KR', 'Noto Sans JP', '.AppleSystemUIFont', Arial, sans-serif;
@@ -10,13 +9,17 @@ $myFont: 'Open Sans', 'Noto Sans HK', 'Noto Sans KR', 'Noto Sans JP', '.AppleSys
 
 body {
   background-color: white;
-  margin: 10px 6%;
+  margin: 0 6% 10px 6%;
   font-family: $myFont;
-
+  padding: 0 10px;
   //display: flex;
   min-height: 100vh;
   flex-direction: column;
   /* make page full even when it is empty*/
+}
+
+.nav-bar {
+  margin-top: 0;
 }
 
 .edit-bar {
@@ -108,6 +111,10 @@ button {
 
 .green {
   color: forestgreen;
+}
+
+.blue {
+  color: dodgerblue;
 }
 
 .bg-lightgray {
@@ -253,7 +260,7 @@ table {
 
 
 .sheet-div {
-
+  cursor: crosshair;
   grid-row: 1;
   grid-column: 2;
   overflow: auto;
@@ -304,18 +311,39 @@ table {
   font-family: Arial, sans-serif;
   display: inline-block;
   width: 80px;
+  height: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.disabled-button{
+
+.disabled-button {
   color: gray;
+  pointer-events: none;
 }
 
-.selected-row-col{
+.disabled-button:hover {
+  background: inherit;
+}
+
+.selected-row-col {
+  color: white;
   background: forestgreen;
 }
 
-.selected-cell{
+.selected-row-col:hover {
+  color: black;
+}
+
+.selected-row-col > button {
+  color: white;
+}
+
+.selected-row-col > button:hover {
+  color: black;
+}
+
+.selected-cell {
+
   background: rgba(142, 255, 32, 0.5);
 }
