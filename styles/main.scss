@@ -106,7 +106,7 @@ button {
   padding: 4px 8px;
 }
 
-.file-input{
+.file-input {
   display: none;
 }
 
@@ -218,6 +218,7 @@ table {
   width: 80px;
   margin: 0 5px;
   display: inline;
+  cursor: s-resize;
 }
 
 .row-button {
@@ -227,6 +228,7 @@ table {
   margin: 0;
   width: 100%;
   @include cellHeight;
+  cursor: e-resize;
 }
 
 .row-button:hover, .column-button:hover {
@@ -236,6 +238,8 @@ table {
 }
 
 .corner-button {
+  cursor: crosshair;
+  color: white;
   margin: 0;
   width: 100%;
   height: 100%;
@@ -246,6 +250,7 @@ table {
 .corner-button:hover {
   border: 1px solid black;
   border-radius: 3px;
+  color: black;
 }
 
 .corner-div {
@@ -264,10 +269,13 @@ table {
 
 
 .sheet-div {
-  cursor: crosshair;
   grid-row: 1;
   grid-column: 2;
   overflow: auto;
+}
+
+.sheet-div td {
+  cursor: crosshair;
 }
 
 .column-bar {
