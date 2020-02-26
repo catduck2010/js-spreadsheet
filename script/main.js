@@ -1,4 +1,4 @@
-//const rxjs = require('rxjs');
+// const rxjs = require('rxjs');
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -9,6 +9,108 @@ Array.prototype.remove = function (index) {
     if (index > -1 && index < this.length) {
         this.splice(index, 1);
     }
+};
+
+const handleFile = function (file) {
+    // console.log(file);
+    let reader = new FileReader();
+    //let str = '';
+    reader.readAsText(file);
+    reader.onload = function (e) {
+        loadFile(e.target.result);
+    };
+    reader.onerror = function (e) {
+        alert('Something Wrong: ' + e);
+    };
+};
+
+const createAndDownloadFile = function (fileName, content) {
+    let aTag = document.createElement('a');
+    let blob = new Blob([`\ufeff${content}`], {type: 'text/plain;charset=utf-8'});
+    // let blob = new Blob([content]);
+    aTag.download = fileName;
+    aTag.href = URL.createObjectURL(blob);
+    aTag.click();
+    URL.revokeObjectURL(blob);
+};
+
+const csv2array = function (strData, strDelimiter = ',') {
+    // Check to see if the delimiter is defined. If not,
+    let strMatchedValue;
+    // then default to comma.
+    strDelimiter = (strDelimiter || ",");
+
+    // Create a regular expression to parse the CSV values.
+    const objPattern = new RegExp(
+        (
+            // Delimiters.
+            "(\\" + strDelimiter + "|\\r?\\n|\\r|^)" +
+
+            // Quoted fields.
+            "(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|" +
+
+            // Standard fields.
+            "([^\"\\" + strDelimiter + "\\r\\n]*))"
+        ),
+        "gi"
+    );
+
+
+    // Create an array to hold our data. Give the array
+    // a default empty first row.
+    let arrData = [[]];
+
+    // Create an array to hold our individual pattern
+    // matching groups.
+    let arrMatches = null;
+
+
+    // Keep looping over the regular expression matches
+    // until we can no longer find a match.
+    while (arrMatches = objPattern.exec(strData)) {
+
+        // Get the delimiter that was found.
+        let strMatchedDelimiter = arrMatches[1];
+
+        // Check to see if the given delimiter has a length
+        // (is not the start of string) and if it matches
+        // field delimiter. If id does not, then we know
+        // that this delimiter is a row delimiter.
+        if (
+            strMatchedDelimiter.length &&
+            (strMatchedDelimiter !== strDelimiter)
+        ) {
+
+            // Since we have reached a new row of data,
+            // add an empty row to our data array.
+            arrData.push([]);
+
+        }
+
+
+        // Now that we have our delimiter out of the way,
+        // let's check to see which kind of value we
+        // captured (quoted or unquoted).
+        if (arrMatches[2]) {
+
+            // We found a quoted value. When we capture
+            // this value, unescape any double quotes.
+            strMatchedValue = arrMatches[2].replace(
+                new RegExp("\"\"", "g"),
+                "\""
+            );
+
+        } else {
+            // We found a non-quoted value.
+            strMatchedValue = arrMatches[3];
+        }
+        // Now that we have our value string, let's add
+        // it to the data array.
+        arrData[arrData.length - 1].push(strMatchedValue);
+    }
+
+    // Return the parsed data.
+    return (arrData);
 };
 
 class SheetCell {
@@ -22,6 +124,7 @@ class SheetCell {
 class Sheet { // spreadsheet data structure
     constructor(rows, cols) { // create sheet
         this.board = [];
+        // row col
         this.rowNum = rows;
         this.colNum = cols;
         for (let i = 0; i < rows; i++) {
@@ -31,6 +134,12 @@ class Sheet { // spreadsheet data structure
             }
             this.board.push(temp);
         }
+    }
+
+    toCSV() {
+        const re = /(?<![,])[,][,]*/;
+        let rows = this.getStrBoard();
+        return rows.map(e => e.join(",")).join("\n");
     }
 
     addRow(at) {
@@ -99,12 +208,6 @@ class Sheet { // spreadsheet data structure
         return res;
     }
 
-    toCSV() {
-        let rows = this.getStrBoard();
-        return "data:text/csv;charset=utf-8,"
-            + rows.map(e => e.join(",")).join("\n");
-    }
-
     updateCell(x, y, str, formula) { // update cell's content
         let cell = this.getCell(x, y);
         cell.formula = formula;
@@ -160,11 +263,9 @@ class SheetTable { // data structure to present spreadsheet
         this.crossBtn = null;
         this.fxBtn = null;
 
-        this.clicked = 0;
         this.writeTable();
         this.addListeners();
     }
-
 
     addListeners() { // add listeners to input & button elements
         let sheetTable = this;
@@ -184,35 +285,21 @@ class SheetTable { // data structure to present spreadsheet
             if (event.key === "Enter") {
                 sheetTable.editCell();
                 this.blur();
+                //sheetTable.selectNext();
             } else if (event.key === "Escape") {
                 sheetTable.setLocator();
                 this.blur();
                 sheetTable.disableButtons();
             }
         });
-        // this.textedit.addEventListener("input", function () {
-        //     let curVal = this.value;
-        //     if (curVal === '' || curVal.length === 0) {
-        //         sheetTable.enableButton(sheetTable.fxBtn);
-        //     } else {
-        //         sheetTable.disableButton(sheetTable.fxBtn);
-        //     }
-        // });
+        this.textedit.addEventListener("input", function () {
+            sheetTable.syncTextEdit();
+        });
         this.textedit.addEventListener("focusin", function () {
             sheetTable.enableButton(sheetTable.checkBtn);
             sheetTable.enableButton(sheetTable.crossBtn);
             sheetTable.enableButton(sheetTable.fxBtn);
         });
-
-        const buttonClicked = function (resolve, reject) {
-            setTimeout(function () {
-                if (sheetTable.clicked > 0) {
-                    resolve(true);
-                } else {
-                    reject('No Button Clicked');
-                }
-            });
-        };
 
         this.crossBtn.addEventListener("click", function () {
             sheetTable.setLocator();
@@ -264,7 +351,13 @@ class SheetTable { // data structure to present spreadsheet
         } else {
             this.textedit.value = cell.str;
         }
+        cell.cell.innerText = cell.str;
         this.disableButtons();
+    }
+
+    syncTextEdit() {
+        let divCell = this.sheet.getCell(this.x, this.y).cell;
+        divCell.innerText = this.textedit.value;
     }
 
     getTableCells() { // make indexes of all cells
@@ -277,6 +370,10 @@ class SheetTable { // data structure to present spreadsheet
                 let cell = document.getElementById(letter + '-cell-' + i);
                 cell.parentElement.addEventListener("click", function () {
                     sheetTable.select(i, letter);
+                });
+                cell.parentElement.addEventListener("dblclick", function () {
+                    sheetTable.select(i, letter);
+                    sheetTable.textedit.focus();
                 });
                 cell.setAttribute('title', sheetTable.sheet.getCell(i, letter).str);
                 this.sheet.getCell(i, letter).cell = cell;
@@ -342,6 +439,14 @@ class SheetTable { // data structure to present spreadsheet
         this.setLocator();
     }
 
+    // selectNext() {
+    //     let x = this.x < this.sheet.rowNum ? this.x + 1 : this.x;
+    //     if (x === this.x) {
+    //         this.select(x, this.y);
+    //         this.textedit.focus();
+    //     }
+    // }
+
     selectRow(x) {
         this.unselect();
         this.colBtns.forEach(function (btn) {
@@ -403,6 +508,7 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     unselect() { // un-visualize a selection to visualize a new selection
+        this.setLocator();
         if (this.flags[0] === true) {
             if (this.flags[1] === true) {
                 // all selected
@@ -452,6 +558,7 @@ class SheetTable { // data structure to present spreadsheet
 
             } else {
                 // a cell is selected
+
                 let cell = document.getElementById(this.y + '-cell-' + this.x).parentElement;
                 let col = document.getElementById('col-btn-' + this.y).parentElement;
                 let row = document.getElementById('row-btn-' + this.x);
@@ -560,7 +667,8 @@ class SheetTable { // data structure to present spreadsheet
             let temp = '<td><button class="button sheet-button column-button" id="col-btn-'
                 + this.sheet.index2letter(i) + '">'
                 + this.sheet.index2letter(i) + '</button></td>';
-            let temp2 = '<td><button class="button sheet-button column-button">'
+            let temp2 = '<td><button class="button sheet-button column-button" id="fake-col-btn-'
+                + this.sheet.index2letter(i) + '">'
                 + this.sheet.index2letter(i) + '</button></td>';
             str += temp;
             str2 += temp2;
@@ -582,7 +690,7 @@ class SheetTable { // data structure to present spreadsheet
             for (let j = 0; j < sheet.colNum; j++) {
                 let cell = board[i][j];
 
-                temp += '<td><div class="cell-div" ' +
+                temp += '<td class="cell-td"><div class="cell-div" ' +
                     'id="' + sheet.index2letter(j) + '-cell-' + (i + 1) + '">' + cell.str + '</div></td>';
             }
             temp += '</tr>';
@@ -612,6 +720,18 @@ class SheetTable { // data structure to present spreadsheet
         cell.innerHTML = val;
         cell.setAttribute('title', val);
         this.setLocator();
+    }
+
+    importCell(x, y, val) {
+        this.sheet.updateCell(x, y, val, null);
+        let cell = this.sheet.getCell(x, y).cell;
+        cell.innerText = val;
+        cell.setAttribute('title', val);
+    }
+
+    downloadCSV() {
+        let csv = this.sheet.toCSV();
+        createAndDownloadFile('export.csv', csv);
     }
 }
 
@@ -652,6 +772,7 @@ const hideMenu = function () {
         }
     });
 };
+
 // hide when click other places
 window.onclick = function (e) {
     if (!e.target.matches('.drop-btn')) {
@@ -686,16 +807,58 @@ const syncScroll = function () { // sync the horizontal scroll between pinned co
     down.addEventListener('scroll', syncDown);
 };
 
+const newSpreadsheet = function (row = 50, col = 27) {
+    document.sheetTable = new SheetTable(row, col);
+};
 
 const newFile = function () { // start a new spreadsheet
     //hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
-        document.sheetTable = new SheetTable(100, 27);
+        newSpreadsheet();
     }
 };
 
-document.sheetTable = new SheetTable(100, 27);
+const openFile = function () {
+    if (confirm("Are you sure to import? This operation would clear all the contents. ")) {
+        let fileBtn = document.getElementById('file-btn');
+        fileBtn.click();
+    }
+};
 
+const loadFile = function (str) {
+    if (str.length < 1) {
+        alert('Something Wrong Happened~');
+        return;
+    }
+    let array = csv2array(str);
+    console.log(array);
+    let shape = getArrayShape(array);
+    if (shape[0] < 1 || shape[1] < 1) {
+        return;
+    }
+    newSpreadsheet(shape[0], shape[1]);
+    let tbl = document.sheetTable;
+    for (let i = 1; i <= shape[0]; i++) {
+        let arr = array[i - 1];
+        for (let j = 0; j < arr.length; j++) {
+            const letter = tbl.sheet.index2letter(j);
+            tbl.importCell(i, letter, arr[j]);
+            console.log('Processing ' + letter + i);
+        }
+    }
+    tbl.select(1, 'A');
+};
+
+const getArrayShape = function (array) {
+    let row = array.length;
+    let col = -1;
+    array.forEach(function (subArray) {
+        col = Math.max(subArray.length, col);
+    });
+    return [row, col];
+};
+
+newSpreadsheet();
 syncScroll();
 
 
