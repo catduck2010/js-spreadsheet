@@ -201,7 +201,12 @@ class Sheet { // spreadsheet data structure
         this.board.forEach(function (row) {
             let temp = [];
             row.forEach(function (cell) {
-                temp.push(cell.str);
+                const str = cell.str;
+                if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+                    temp.push('"' + str + '"');
+                } else {
+                    temp.push(str);
+                }
             });
             res.push(temp);
         });
