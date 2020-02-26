@@ -43,18 +43,10 @@ input {
   width: 70px;
 }
 
-select {
-  border: none;
-}
-
 .sticky {
   top: 0;
   position: sticky;
   background: white;
-}
-
-.sticky-x {
-  position: sticky;
 }
 
 /* make things like a button */
@@ -93,8 +85,9 @@ button {
 
 .spreadsheet {
   //background: #D9C666;
-
-  margin: 0 10px;
+  margin: -30px 10px 0 10px;
+  // -30px is important as this hides the fake column bar
+  // 10px is for alignment with the sticky column bar
 }
 
 .sheet-button {
@@ -273,7 +266,7 @@ table {
   grid-column: 2;
   overflow: auto;
 }
-
+// change cursor when pointing at cells
 .sheet-div td {
   cursor: crosshair;
 }
@@ -299,9 +292,9 @@ table {
   background: lightgray;
 }
 
+// grid layout
 .grids {
   @include commonGrid;
-  margin-top: -30px;
   grid-template-rows: auto;
   grid-template-columns: 35px auto;
 }
@@ -326,6 +319,7 @@ table {
   justify-items: center;
 }
 
+//container for fake column bar & cells
 .cell-div {
   font-family: Arial, sans-serif;
   width: 80px;
@@ -336,6 +330,7 @@ table {
   text-overflow: ellipsis;
 }
 
+// make buttons unable to click
 .disabled-button {
   color: gray;
   pointer-events: none;
@@ -345,6 +340,7 @@ table {
   background: inherit;
 }
 
+// highlight the selected row/column
 .selected-row-col {
   color: white;
   background: forestgreen;
@@ -363,7 +359,7 @@ table {
 .selected-row-col > button:hover {
   color: black;
 }
-
+// highlight the selected cell
 .selected-cell {
   transition: 0.3s;
   background: rgba(142, 255, 32, 0.5);
