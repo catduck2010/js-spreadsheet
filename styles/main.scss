@@ -29,7 +29,7 @@ body {
 }
 
 input {
-  margin: 0px 5px;
+  margin: 0 5px;
 }
 
 .edit-area {
@@ -93,7 +93,8 @@ button {
 
 .spreadsheet {
   //background: #D9C666;
-  margin-top: 0;
+
+  margin: 0 10px;
 }
 
 .sheet-button {
@@ -103,6 +104,10 @@ button {
 .edit-button {
   margin: 1px;
   padding: 4px 8px;
+}
+
+.file-input{
+  display: none;
 }
 
 .red {
@@ -145,7 +150,7 @@ button {
   display: none;
   position: absolute;
   min-width: 160px;
-  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
   z-index: 1;
   border-radius: 5px;
   transition: 0.3s;
@@ -190,7 +195,7 @@ tr {
 
 td {
   border: 1px solid lightgray;
-  margin: 2px;
+  margin: 0;
   padding: 0;
 }
 
@@ -202,10 +207,6 @@ table {
   display: inline-block;
   table-layout: fixed;
   border-block: none;
-}
-
-.spreadsheet {
-  margin: 20px 10px;
 }
 
 .column-button, .row-button {
@@ -276,6 +277,7 @@ table {
   align-items: center;
   overflow: auto;
   overflow-y: hidden;
+  background: white;
 }
 
 .column-bar::-webkit-scrollbar {
@@ -303,18 +305,24 @@ table {
 }
 
 .table-head {
-  margin: 0px 10px;
+  margin: 0 10px;
 }
 
 .table-cell {
   width: 80px;
 }
 
+.cell-td {
+  align-items: center;
+  align-content: center;
+  justify-items: center;
+}
+
 .cell-div {
   font-family: Arial, sans-serif;
-  display: inline-block;
   width: 80px;
   height: 100%;
+  display: inline-block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
