@@ -5,7 +5,7 @@
     <title>Spreadsheet</title>
     <link rel="stylesheet" href="dist/main.css">
     <script defer src="script/main.js"></script>
-    <script defer src="https://unpkg.com/rxjs/bundles/rxjs.umd.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/rxjs/6.5.4/rxjs.umd.min.js"></script>
 </head>
 <body>
 <header class="sticky">
@@ -17,8 +17,7 @@
                 <hr>
                 <input class="file-input" type="file" accept=".csv"
                        id="file-btn" onchange="handleFile(this.files[0])">
-                <a href="#" onclick="openFile()">Import...</a>
-                <a href="#">Import from online source...</a>
+                <a href="#" onclick="openFile()">Import from Upload...</a>
                 <a href="#" onclick="document.sheetTable.downloadCSV()">Export as CSV file...</a>
 
             </div>
@@ -39,7 +38,7 @@
         <div class="nav-item dropdown">
             <button class="drop-btn button nav-item" onclick="showMenu('help-menu')">Help</button>
             <div class="dropdown-content" id="help-menu">
-                <a href="#">About...</a>
+                <a href="#" onclick="alert(ORA())">About...</a>
             </div>
         </div>
     </div>

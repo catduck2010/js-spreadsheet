@@ -277,6 +277,7 @@ table {
   justify-items: center;
   align-items: center;
   overflow: auto;
+  overflow: -moz-scrollbars-none;
   overflow-y: hidden;
   background: white;
 }
