@@ -1,4 +1,5 @@
 // const rxjs = require('rxjs');
+
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -9,6 +10,18 @@ Array.prototype.remove = function (index) {
     if (index > -1 && index < this.length) {
         this.splice(index, 1);
     }
+};
+
+const sum = function (str) {
+    let res = str.split(',');
+    for (let i = 0; i < res.length; i++) {
+        res[i] = res[i].trim().toUpperCase();
+    }
+    doSum(res);
+};
+
+const doSum = function (arr) {
+
 };
 
 const handleFile = function (file) {
@@ -36,7 +49,6 @@ const createAndDownloadFile = function (fileName, content) {
 
 const csv2array = function (data) {
     let matchedVal, delimiter = ',';
-
     // regular expression to parse the CSV data
     const csvPattern = /(,|\r?\n|\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^",\r\n]*))/gi;
 
@@ -49,14 +61,13 @@ const csv2array = function (data) {
     let matches = null;
 
     // Keep looping over the regular expression matches until we can no longer find a match.
-    while (matches = csvPattern.exec(data)) {
-
+    while ((matches = csvPattern.exec(data)) != null) {
         // get the delimiter found
         let matchedDelimiter = matches[1];
 
         // Check to see if the given delimiter has a length (is not the start of string) and if it matches
         // field delimiter. If id does not, then we know that this delimiter is a row delimiter.
-        if (matchedDelimiter.length && (matchedDelimiter !== delimiter)) {
+        if (matchedDelimiter.length && (matchedDelimiter !== delimiter)) { // when delimiter === ''
             // new row
             arrData.push([]);
         }
@@ -71,28 +82,46 @@ const csv2array = function (data) {
     }
 
     // return the parsed data.
-    return (arrData);
+    return arrData;
 };
-
-class RefNode {
-    // x: row num(>=1)
-    // y: col repeat(1+, 'A-Z')
-    constructor(x, y) {
-
-    }
-}
 
 class ReferenceTree {
     constructor() {
+        this.graph = new Map();
+    }
+
+    addReference(node, ref) {
 
     }
+
 }
 
 class SheetCell {
     constructor(str) {
+        this.observable = null;
         this.cell = null; // store the cell that represents it on the sheet table
         this.formula = null; // stores formula
+        this.isNum = false;
         this.val = str; //stores value
+        this.references = new Set();
+    }
+
+    convertLabel(label) { // convert 'A1' to [1,'A']
+        const regEx = /^[A-Z]+[1-9][0-9]*$/;
+        let res = [];
+        if (regEx.test(label)) {
+            let start = 0;
+            while (!(label.charCodeAt(start) <= '9'.charCodeAt(0)
+                && label.charCodeAt(start) >= '0'.charCodeAt(0))
+            && start < label.length) {
+                start++;
+            }
+
+            let x = label.substring(start);
+            let y = label.substring(0, start);
+            res = [x, y];
+        }
+        return res;
     }
 
     getValue() {
@@ -100,11 +129,19 @@ class SheetCell {
     }
 
     setValue(val) {
-        this.val = val;
+        if (val === '' || val.length === 0 || isNaN(val)) {
+            this.isNum = false;
+            this.val = val;
+        } else {
+            this.isNum = true;
+            this.val = Number(val);
+        }
     }
 
     refreshFormula() {
-
+        if (this.formula !== null) {
+            this.setValue(eval(this.formula.substring(1)));
+        }
     }
 }
 
@@ -171,6 +208,15 @@ class Sheet { // spreadsheet data structure
         this.colNum--;
     }
 
+    getCellByLabel(label) {
+        let cell = this.board[0][0];
+        let x = cell.convertLabel(label);
+        if (x.length > 0) {
+            return this.getCell(x[0], x[1]);
+        }
+        return null;
+    }
+
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
         let x = row - 1; //start from 1
         let y = this.letter2index(col);
@@ -203,7 +249,15 @@ class Sheet { // spreadsheet data structure
     updateCell(x, y, val, formula) { // update cell's content
         let cell = this.getCell(x, y);
         cell.formula = formula;
-        cell.setValue(val);
+        if (formula !== null) {
+            cell.refreshFormula();
+        } else {
+            cell.setValue(val);
+        }
+    }
+
+    updateReference(cell, formula) {
+        let str = '{0}'
     }
 
 
@@ -555,8 +609,10 @@ class SheetTable { // data structure to present spreadsheet
     editCell() { //auto set content in the cell
         let value = this.textedit.value;
         if (value.length > 0) {
-            if (value.charAt(0) === '=') {
-                this.updateCell(value, '?');
+            if (value.charAt(0) === '=' && value.length > 1) {
+                // replace all spaces and convert to uppercase
+                let formula = value.replace(/\s+/g, '').toUpperCase();
+                this.updateCell(formula, '?');
             } else {
                 this.updateCell(null, value);
             }
@@ -566,21 +622,14 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     locate() { // when input a new cell label & try to locate
-        const regEx = /^[A-Z]+[1-9][0-9]*$/;
-        let label = this.locator.value;
-        if (!regEx.test(label)) {
+        let cell = this.sheet.getCell(1, 'A');
+        let label = cell.convertLabel(this.locator.value);
+
+        if (label.length === 0) {
             alert('Wrong Pattern!');
             this.setLocator();
         } else {
-            let start = 0;
-            while (!(label.charCodeAt(start) <= '9'.charCodeAt(0)
-                && label.charCodeAt(start) >= '0'.charCodeAt(0))
-            && start < label.length) {
-                start++;
-            }
-
-            let x = label.substring(start);
-            let y = label.substring(0, start);
+            let x = label[0], y = label[1];
             let yCode = this.sheet.letter2index(y);
             if (x > 0 && x <= this.sheet.rowNum && yCode >= 0 && yCode < this.sheet.colNum) {
                 this.select(x, y);
@@ -589,7 +638,6 @@ class SheetTable { // data structure to present spreadsheet
                 this.setLocator();
             }
         }
-
     }
 
     addRow() {// add row before/at
@@ -666,7 +714,6 @@ class SheetTable { // data structure to present spreadsheet
         let innerStr = this.writeColBar();
         let sheet = this.sheet;
         let board = sheet.board;
-        let sheetTable = this;
         for (let i = 0; i < sheet.rowNum; i++) {
             let temp = '<tr>';
             for (let j = 0; j < sheet.colNum; j++) {
@@ -695,9 +742,11 @@ class SheetTable { // data structure to present spreadsheet
 
     updateCell(formula, val) { // update cell's content
         this.sheet.updateCell(this.x, this.y, val, formula);
-        let cell = this.sheet.getCell(this.x, this.y).cell;
-        cell.innerHTML = val;
-        cell.setAttribute('title', val);
+        let sheetCell = this.sheet.getCell(this.x, this.y);
+        let cell = sheetCell.cell;
+        const value = sheetCell.getValue();
+        cell.innerHTML = value;
+        cell.setAttribute('title', value);
         this.setLocator();
     }
 
@@ -755,6 +804,25 @@ window.onclick = function (e) {
     }
 };
 
+/**
+ * @return {string}
+ */
+const ORA = function (num = 24) {
+    const ora =
+        '╭━━━┳━━━┳━━━╮╭╮\n' +
+        '┃╭━╮┃╭━╮┃╭━╮┃┃┃\n' +
+        '┃┃╱┃┃╰━╯┃┃╱┃┃┃┃\n' +
+        '┃┃╱┃┃╭╮╭┫╰━╯┃╰╯\n' +
+        '┃╰━╯┃┃┃╰┫╭━╮┃╭╮\n' +
+        '╰━━━┻╯╰━┻╯╱╰╯╰╯';
+    let str = '';
+    for (let i = 0; i < 14 * num; i++) {
+        str += 'ORA ';
+    }
+    str += '\n' + ora;
+    return str;
+};
+
 const syncScroll = function () { // sync the horizontal scroll between pinned column bar && table
     let down = document.querySelector('#sheet-div');
     let up = document.querySelector('#new-col-bar');
@@ -777,11 +845,8 @@ const syncScroll = function () { // sync the horizontal scroll between pinned co
     down.addEventListener('scroll', syncDown);
 };
 
-const newSpreadsheet = function (firstTime = false, row = 64, col = 27) {
+const newSpreadsheet = function (row = 64, col = 27) {
     document.sheetTable = new SheetTable(row, col);
-    if (firstTime) {
-        document.sheetTable.addListeners();
-    }
 };
 
 const newFile = function () { // start a new spreadsheet
@@ -809,7 +874,7 @@ const loadFile = function (str) {
     if (shape[0] < 1 || shape[1] < 1) {
         return;
     }
-    newSpreadsheet(false, shape[0], shape[1]);
+    newSpreadsheet(shape[0], shape[1]);
     let tbl = document.sheetTable;
     for (let i = 1; i <= shape[0]; i++) {
         let arr = array[i - 1];
@@ -820,7 +885,7 @@ const loadFile = function (str) {
         }
     }
     //tbl.addListeners();
-    //tbl.select(1, 'A');
+    tbl.select(1, 'A');
 };
 
 const getArrayShape = function (array) {
@@ -832,7 +897,8 @@ const getArrayShape = function (array) {
     return [row, col];
 };
 
-newSpreadsheet(true);
+newSpreadsheet();
+document.sheetTable.addListeners();
 syncScroll();
 
 
