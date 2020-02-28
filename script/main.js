@@ -1,5 +1,5 @@
 // const rxjs = require('rxjs');
-
+let listenersAdded = false;
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -18,6 +18,7 @@ Math.uuid = function () {
     const S4 = () => (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
 };
+//const oval = new Function('formula', 'return ' + formula.substring(1) + ';');
 
 const sum = function (str) {
     let res = str.split(',');
@@ -104,13 +105,13 @@ class ReferenceTree {
 class SheetCell {
     constructor() {
         this.uuid = Math.uuid();
-        this.observable = null;
         this.label = '';
-        this.cell = null; // store the cell that represents it on the sheet table
-        this.formula = null; // stores formula
         this.isNum = false;
         this.val = ''; //stores value
-        this.references = new Set();
+        this.references = [];
+        this.cell = null; // store the cell that represents it on the sheet table
+        this.formula = null; // stores formula
+        this.formulaR = null;
     }
 
     convertLabel(label) { // convert 'A1' to [1,'A']
@@ -149,17 +150,30 @@ class SheetCell {
         }
     }
 
-    refreshFormula() {
+    refreshFormula(map) {
         if (this.formula !== null) {
-            try {
-                const calc = new Function('return ' + this.formula.substring(1) + ';');
-                this.setValue(calc());
-            } catch (e) {
-                alert('Invalid formula!');
-                this.formula = null;
+            let res = this.formulaR;
+            let flag = false;
+            this.references.forEach((cell) => {
+                if (map.has(cell.uuid)) {
+                    res = res.replace('{-R-}', cell.label);
+                } else {
+                    flag = true;
+                    res = res.replace('{-R-}', '#REF!');
+                }
+            });
+            if (flag) {
+                this.setValue('#REF!');
             }
+            this.formula = res;
         }
     }
+
+    parseFormula(formula) {
+
+    }
+
+
 }
 
 class Sheet { // spreadsheet data structure
@@ -190,7 +204,7 @@ class Sheet { // spreadsheet data structure
         let temp = [];
         for (let i = 0; i < this.colNum; i++) {
             let cell = new SheetCell();
-            cell.setLabel(at + 1, this.letter2index(i));
+            cell.setLabel(at + 1, this.index2letter(i));
             temp.push(cell);
             this.cellMap.set(cell.uuid, cell);
         }
@@ -256,6 +270,29 @@ class Sheet { // spreadsheet data structure
         return this.cellMap.get(id);
     }
 
+    getCellByLabel(label) {
+        const fx = this.board[0][0].convertLabel;
+        const res = fx(label);
+        return this.getCell(res[0], res[1]);
+    }
+
+    getCellReference(cell, formula) {
+        let str = formula.substring(1);
+        const regEx = /(^|\+|-|\*|\/|\()([A-Z]+[1-9][0-9]*)/gi;
+        let matches = [];
+        let matchRes = null;
+        while ((matchRes = regEx.exec(str)) != null) {
+            matches.push(matchRes[2]);
+        }
+        let cells = [];
+        let modified = str.substring(0);
+        matches.forEach((label) => {
+            cells.push(this.getCellByLabel(label));
+            modified = modified.replace(label, '{-R-}');
+        });
+        return [cells, modified];
+    }
+
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
         let x = row - 1; // start from 1
         let y = this.letter2index(col);
@@ -286,13 +323,37 @@ class Sheet { // spreadsheet data structure
         return res;
     }
 
-    updateCell(x, y, val, formula) { // update cell's content
-        let cell = this.getCell(x, y);
-        cell.formula = formula;
-        if (formula !== null) {
-            cell.refreshFormula();
+    updateCell(x, y, val, formula = null) { // update cell's content
+        let thisCell = this.getCell(x, y);
+        if (formula != null) {
+            let res = this.getCellReference(thisCell, formula);
+            const refs = res[0];
+            let modifiedFormula = res[1];
+            refs.forEach((cell) => {
+                if (cell.label === thisCell.label) {
+                    throw 'There is one or more circular reference.';
+                }
+                modifiedFormula = modifiedFormula.replace('{-R-}',
+                    cell.getValue());
+            });
+            let nval = null;
+            try {
+                const cval = new Function('return ' + modifiedFormula + ';');
+                nval = cval();
+                if (nval != null) {
+                    thisCell.setValue(nval);
+                    thisCell.formula = formula;
+                    thisCell.formulaR = '=' + res[1];
+                    thisCell.references = refs;
+                }
+            } catch (e) {
+                alert('Invalid formula: ' + e);
+            }
         } else {
-            cell.setValue(val);
+            thisCell.setValue(val);
+            thisCell.formula = null;
+            thisCell.formulaR = null;
+            thisCell.references = [];
         }
     }
 
@@ -327,6 +388,7 @@ class SheetTable { // data structure to present spreadsheet
         this.y = 'A';
         this.sheet = new Sheet(row, col);
         this.flags = [false, false];
+        this.listenersAdded = false;
         // row selected, column selected
 
         // constant elements
@@ -344,42 +406,45 @@ class SheetTable { // data structure to present spreadsheet
         this.tableCells = null;
 
         this.writeTable();
+        this.addListeners();
     }
 
     addListeners() { // add listeners to input & button elements
-        // locator's listener
-        this.locator.addEventListener("keyup", function (event) {
-            if (event.key === "Enter") { // press Enter or return
-                //console.log('Pressed');
-                document.sheetTable.locate();
-                this.blur();
-            } else if (event.key === "Escape") {
-                document.sheetTable.setLocator();
-                this.blur();
-            }
-        });
-        // textedit's listener
-        this.textedit.addEventListener("keyup", function (event) {
-            if (event.key === "Enter") {
-                document.sheetTable.editCell();
-                this.blur();
-                //sheetTable.selectNext();
-            } else if (event.key === "Escape") {
-                document.sheetTable.setLocator();
-                this.blur();
-                document.sheetTable.disableButtons();
-            }
-        });
-        this.textedit.addEventListener("input", function () {
-            document.sheetTable.syncTextEdit();
-        });
-        this.textedit.addEventListener("focusin", function () {
-            document.sheetTable.enableButton(document.sheetTable.checkBtn);
-            document.sheetTable.enableButton(document.sheetTable.crossBtn);
-            document.sheetTable.enableButton(document.sheetTable.fxBtn);
-            document.sheetTable.syncTextEdit();
-        });
-
+        if (!listenersAdded) { // ensure to be used ONLY ONCE
+            // locator's listener
+            this.locator.addEventListener("keyup", function (event) {
+                if (event.key === "Enter") { // press Enter or return
+                    //console.log('Pressed');
+                    document.sheetTable.locate();
+                    this.blur();
+                } else if (event.key === "Escape") {
+                    document.sheetTable.setLocator();
+                    this.blur();
+                }
+            });
+            // textedit's listener
+            this.textedit.addEventListener("keyup", function (event) {
+                if (event.key === "Enter") {
+                    document.sheetTable.editCell();
+                    this.blur();
+                    //sheetTable.selectNext();
+                } else if (event.key === "Escape") {
+                    document.sheetTable.setLocator();
+                    this.blur();
+                    document.sheetTable.disableButtons();
+                }
+            });
+            this.textedit.addEventListener("input", function () {
+                document.sheetTable.syncTextEdit();
+            });
+            this.textedit.addEventListener("focusin", function () {
+                document.sheetTable.enableButton(document.sheetTable.checkBtn);
+                document.sheetTable.enableButton(document.sheetTable.crossBtn);
+                document.sheetTable.enableButton(document.sheetTable.fxBtn);
+                document.sheetTable.syncTextEdit();
+            });
+            listenersAdded = true;
+        }
     }
 
     clickCross(button) {
@@ -424,6 +489,7 @@ class SheetTable { // data structure to present spreadsheet
         this.locator.value = this.y + this.x;
         let cell = this.sheet.getCell(this.x, this.y);
         if (cell.formula !== null) {
+            cell.refreshFormula(this.sheet.cellMap);
             this.textedit.value = cell.formula;
         } else {
             this.textedit.value = cell.getValue();
@@ -663,6 +729,10 @@ class SheetTable { // data structure to present spreadsheet
         }
     }
 
+    queryCell(id) {
+        return this.sheet.getCellByID(id);
+    }
+
     addRow() {// add row before/at
         this.sheet.addRow(this.x - 1);
         this.writeTable();
@@ -757,11 +827,10 @@ class SheetTable { // data structure to present spreadsheet
         this.setLocator();
     }
 
-    flushButtons() { // get all required buttons/cells
+    flushButtons() { // rewrite buttons/cells generated by code
         this.rowBtns = this.getRowButtons();
         this.colBtns = this.getColButtons();
         this.tableCells = this.getTableCells();
-
         this.select(this.x, this.y);
     }
 
@@ -803,7 +872,7 @@ class SheetTable { // data structure to present spreadsheet
 
 
 // click to switch between showing and hiding
-let showMenu = elementId => {
+let showMenu = (elementId) => {
     let elements = ["file2-menu", "edit-menu", "help-menu"];
     elements.remove(elements.indexOf(elementId));
     document.getElementById(elementId).classList.toggle("show");
@@ -813,7 +882,7 @@ let showMenu = elementId => {
             dd.classList.remove('show');
         }
     })
-}
+};
 
 // hide when click other places
 window.onclick = (e) => {
@@ -903,7 +972,8 @@ const loadFile = (str) => {
         let arr = array[i - 1];
         for (let j = 0; j < arr.length; j++) {
             const letter = tbl.sheet.index2letter(j);
-            tbl.importCell(i, letter, arr[j]);
+            tbl.importCell(i, letter, arr[j].replace(/\r?\n|\r/g, ', '));
+            // avoid new line
             //console.log('Processing ' + letter + i);
         }
     }
@@ -921,9 +991,7 @@ const getArrayShape = (array) => {
 };
 
 newSpreadsheet();
-document.sheetTable.addListeners();
 syncScroll();
-
 
 
 
