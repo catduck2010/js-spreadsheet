@@ -12,6 +12,13 @@ Array.prototype.remove = function (index) {
     }
 };
 
+// generate a pseudo-GUID/UUID by concatenating random hexadecimal
+Math.uuid = function () {
+    // generate four random hex digits
+    const S4 = () => (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+    return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
+};
+
 const sum = function (str) {
     let res = str.split(',');
     for (let i = 0; i < res.length; i++) {
@@ -24,10 +31,8 @@ const doSum = function (arr) {
 
 };
 
-const handleFile = function (file) {
-    // console.log(file);
+const handleFile = (file) => {
     let reader = new FileReader();
-    //let str = '';
     reader.readAsText(file);
     reader.onload = function (e) {
         loadFile(e.target.result);
@@ -37,7 +42,7 @@ const handleFile = function (file) {
     };
 };
 
-const createAndDownloadFile = function (fileName, content) {
+const createAndDownloadFile = (fileName, content) => {
     let aTag = document.createElement('a');
     let blob = new Blob([`\ufeff${content}`], {type: 'text/plain;charset=utf-8'});
     // let blob = new Blob([content]);
@@ -47,7 +52,7 @@ const createAndDownloadFile = function (fileName, content) {
     URL.revokeObjectURL(blob);
 };
 
-const csv2array = function (data) {
+const csv2array = (data) => {
     let matchedVal, delimiter = ',';
     // regular expression to parse the CSV data
     const csvPattern = /(,|\r?\n|\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^",\r\n]*))/gi;
@@ -97,12 +102,14 @@ class ReferenceTree {
 }
 
 class SheetCell {
-    constructor(str) {
+    constructor() {
+        this.uuid = Math.uuid();
         this.observable = null;
+        this.label = '';
         this.cell = null; // store the cell that represents it on the sheet table
         this.formula = null; // stores formula
         this.isNum = false;
-        this.val = str; //stores value
+        this.val = ''; //stores value
         this.references = new Set();
     }
 
@@ -124,6 +131,10 @@ class SheetCell {
         return res;
     }
 
+    setLabel(x, y) {
+        this.label = y + x;
+    }
+
     getValue() {
         return this.val;
     }
@@ -140,7 +151,13 @@ class SheetCell {
 
     refreshFormula() {
         if (this.formula !== null) {
-            this.setValue(eval(this.formula.substring(1)));
+            try {
+                const calc = new Function('return ' + this.formula.substring(1) + ';');
+                this.setValue(calc());
+            } catch (e) {
+                alert('Invalid formula!');
+                this.formula = null;
+            }
         }
     }
 }
@@ -151,10 +168,14 @@ class Sheet { // spreadsheet data structure
         // row col
         this.rowNum = rows;
         this.colNum = cols;
+        this.cellMap = new Map();
         for (let i = 0; i < rows; i++) {
             let temp = [];
             for (let j = 0; j < cols; j++) {
-                temp.push(new SheetCell(""));
+                let cell = new SheetCell();
+                cell.setLabel(i + 1, this.index2letter(j));
+                temp.push(cell);
+                this.cellMap.set(cell.uuid, cell);
             }
             this.board.push(temp);
         }
@@ -168,10 +189,14 @@ class Sheet { // spreadsheet data structure
     addRow(at) {
         let temp = [];
         for (let i = 0; i < this.colNum; i++) {
-            temp.push(new SheetCell(""));
+            let cell = new SheetCell();
+            cell.setLabel(at + 1, this.letter2index(i));
+            temp.push(cell);
+            this.cellMap.set(cell.uuid, cell);
         }
         this.board.insert(at, temp);
         this.rowNum++;
+        this.updateLabel(at + 1);
     }
 
     addColumn(at) {//at as before, at+1 as after
@@ -185,15 +210,24 @@ class Sheet { // spreadsheet data structure
     }
 
     addColumnWithNum(at) {
-        this.board.forEach(function (row) {
-            row.insert(at, new SheetCell(""));
-        });
+        for (let i = 0; i < this.rowNum; i++) {
+            let row = this.board[i];
+            let cell = new SheetCell();
+            cell.setLabel(i + 1, this.index2letter(at));
+            row.insert(at, cell);
+            this.cellMap.set(cell.uuid, cell);
+        }
         this.colNum++;
+        this.updateLabel(0, at + 1);
     }
 
     delRow(at) {
+        this.board[at].forEach((cell) => {
+            this.cellMap.delete(cell.uuid)
+        });
         this.board.remove(at);
         this.rowNum--;
+        this.updateLabel(at);
     }
 
     delColumn(at) {
@@ -202,43 +236,49 @@ class Sheet { // spreadsheet data structure
     }
 
     delColumnWithNum(at) {
-        this.board.forEach(function (row) {
+        this.board.forEach((row) => {
+            this.cellMap.delete(row[at].uuid);
             row.remove(at);
         });
         this.colNum--;
+        this.updateLabel(0, at);
     }
 
-    getCellByLabel(label) {
-        let cell = this.board[0][0];
-        let x = cell.convertLabel(label);
-        if (x.length > 0) {
-            return this.getCell(x[0], x[1]);
+    updateLabel(startRow = 0, startCol = 0) {
+        for (let i = startRow; i < this.rowNum; i++) {
+            for (let j = startCol; j < this.colNum; j++) {
+                this.board[i][j].setLabel(i + 1, this.index2letter(j));
+            }
         }
-        return null;
+    }
+
+    getCellByID(id) {
+        return this.cellMap.get(id);
     }
 
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
-        let x = row - 1; //start from 1
+        let x = row - 1; // start from 1
         let y = this.letter2index(col);
 
         return this.board[x][y];
     }
-
-    // get(row, col) {
-    //     return this.getCell(row, col).str;
-    // }
 
     getStrBoard() {
         let res = [];
         this.board.forEach(function (row) {
             let temp = [];
             row.forEach(function (cell) {
-                let str = cell.getValue();
-                str = str.replace(/"/g, '""');
-                if (str.includes('"') || str.includes(',') || str.includes('\n')) {
-                    temp.push('"' + str + '"');
+                let val = cell.getValue();
+                if (!cell.isNum) {
+                    let str = val;
+                    str = str.replace(/"/g, '""');
+                    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+                        temp.push('"' + str + '"');
+                    } else {
+                        temp.push(str);
+                    }
                 } else {
-                    temp.push(str);
+                    temp.push(val);
                 }
             });
             res.push(temp);
@@ -255,11 +295,6 @@ class Sheet { // spreadsheet data structure
             cell.setValue(val);
         }
     }
-
-    updateReference(cell, formula) {
-        let str = '{0}'
-    }
-
 
     letter2index(letter) {
         let str = letter.toUpperCase();
@@ -290,6 +325,7 @@ class SheetTable { // data structure to present spreadsheet
         //x,y,flag indicates current selection
         this.x = 1;
         this.y = 'A';
+        this.sheet = new Sheet(row, col);
         this.flags = [false, false];
         // row selected, column selected
 
@@ -299,43 +335,16 @@ class SheetTable { // data structure to present spreadsheet
         this.fxBtn = document.getElementById('fx-btn');
         this.locator = document.getElementById('locator');
         this.textedit = document.getElementById('text-edit');
-
-        this.sheet = new Sheet(row, col);
-
+        // elements created by code
         this.rowBar = document.getElementById('left-row-bar');
         this.colBar = document.getElementById('sticky-col-bar');
         this.table = document.getElementById('sheet-table');
-        // console.log(document.getElementById('left-row-bar'));
-        // console.log(this.table);
-
         this.rowBtns = null;
         this.colBtns = null;
         this.tableCells = null;
 
         this.writeTable();
     }
-
-    clickCross(button) {
-        this.setLocator();
-        button.blur();
-        this.disableButtons();
-    }
-
-    clickCheck(button) {
-        this.editCell();
-        button.blur();
-        this.disableButtons();
-    }
-
-    clickFx(button) {
-        let val = this.textedit.value;
-        if (val.length === 0 || (val.length > 0 && val.charAt(0) !== '=')) {
-            this.textedit.value = "=" + val;
-        }
-        button.blur();
-        this.textedit.focus();
-    }
-
 
     addListeners() { // add listeners to input & button elements
         // locator's listener
@@ -368,8 +377,30 @@ class SheetTable { // data structure to present spreadsheet
             document.sheetTable.enableButton(document.sheetTable.checkBtn);
             document.sheetTable.enableButton(document.sheetTable.crossBtn);
             document.sheetTable.enableButton(document.sheetTable.fxBtn);
+            document.sheetTable.syncTextEdit();
         });
 
+    }
+
+    clickCross(button) {
+        this.setLocator();
+        button.blur();
+        this.disableButtons();
+    }
+
+    clickCheck(button) {
+        this.editCell();
+        button.blur();
+        this.disableButtons();
+    }
+
+    clickFx(button) {
+        let val = this.textedit.value;
+        if (val.length === 0 || (val.length > 0 && val.charAt(0) !== '=')) {
+            this.textedit.value = "=" + val;
+        }
+        button.blur();
+        this.textedit.focus();
     }
 
     enableButton(button) { // enable button
@@ -475,14 +506,6 @@ class SheetTable { // data structure to present spreadsheet
         this.flags = [false, false];
         this.setLocator();
     }
-
-    // selectNext() {
-    //     let x = this.x < this.sheet.rowNum ? this.x + 1 : this.x;
-    //     if (x === this.x) {
-    //         this.select(x, this.y);
-    //         this.textedit.focus();
-    //     }
-    // }
 
     selectRow(x) {
         this.unselect();
@@ -643,6 +666,7 @@ class SheetTable { // data structure to present spreadsheet
     addRow() {// add row before/at
         this.sheet.addRow(this.x - 1);
         this.writeTable();
+        this.select(this.x + 1, this.y);
     }
 
     addRowAfter() {// add row after
@@ -651,8 +675,11 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     addColumn() {// add column left/at
+        let f = this.sheet.index2letter;
+        let g = this.sheet.letter2index;
         this.sheet.addColumn(this.y);
         this.writeTable();
+        this.select(this.x, f(1 + g(this.y)));
     }
 
     addColumnAfter() {//add column right
@@ -718,7 +745,6 @@ class SheetTable { // data structure to present spreadsheet
             let temp = '<tr>';
             for (let j = 0; j < sheet.colNum; j++) {
                 let cell = board[i][j];
-
                 temp += '<td class="cell-td"><div class="cell-div" ' +
                     'id="' + sheet.index2letter(j) + '-cell-' + (i + 1) + '">' + cell.getValue() + '</div></td>';
             }
@@ -726,7 +752,6 @@ class SheetTable { // data structure to present spreadsheet
             innerStr += temp;
         }
 
-        //console.log(innerStr);
         this.table.innerHTML = innerStr;
         this.flushButtons();
         this.setLocator();
@@ -778,7 +803,7 @@ class SheetTable { // data structure to present spreadsheet
 
 
 // click to switch between showing and hiding
-function showMenu(elementId) {
+let showMenu = elementId => {
     let elements = ["file2-menu", "edit-menu", "help-menu"];
     elements.remove(elements.indexOf(elementId));
     document.getElementById(elementId).classList.toggle("show");
@@ -791,7 +816,7 @@ function showMenu(elementId) {
 }
 
 // hide when click other places
-window.onclick = function (e) {
+window.onclick = (e) => {
     const el = e.target;
     if (!el.matches('.drop-btn')) {
         let elements = ["file2-menu", "edit-menu", "help-menu"];
@@ -804,10 +829,7 @@ window.onclick = function (e) {
     }
 };
 
-/**
- * @return {string}
- */
-const ORA = function (num = 24) {
+const ORA = (num = 24) => {
     const ora =
         '╭━━━┳━━━┳━━━╮╭╮\n' +
         '┃╭━╮┃╭━╮┃╭━╮┃┃┃\n' +
@@ -815,15 +837,15 @@ const ORA = function (num = 24) {
         '┃┃╱┃┃╭╮╭┫╰━╯┃╰╯\n' +
         '┃╰━╯┃┃┃╰┫╭━╮┃╭╮\n' +
         '╰━━━┻╯╰━┻╯╱╰╯╰╯';
-    let str = '';
+    let o = '';
     for (let i = 0; i < 14 * num; i++) {
-        str += 'ORA ';
+        o += 'ORA ';
     }
-    str += '\n' + ora;
-    return str;
+    o += '\n' + ora;
+    return o;
 };
 
-const syncScroll = function () { // sync the horizontal scroll between pinned column bar && table
+const syncScroll = () => { // sync the horizontal scroll between pinned column bar && table
     let down = document.querySelector('#sheet-div');
     let up = document.querySelector('#new-col-bar');
     const syncUp = function () {
@@ -849,21 +871,21 @@ const newSpreadsheet = function (row = 64, col = 27) {
     document.sheetTable = new SheetTable(row, col);
 };
 
-const newFile = function () { // start a new spreadsheet
+const newFile = () => { // start a new spreadsheet
     //hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
         newSpreadsheet();
     }
 };
 
-const openFile = function () {
+const openFile = () => {
     if (confirm("Are you sure to import? This operation would clear all the contents. ")) {
         let fileBtn = document.getElementById('file-btn');
         fileBtn.click();
     }
 };
 
-const loadFile = function (str) {
+const loadFile = (str) => {
     if (str.length < 1) {
         alert('Something Wrong Happened~');
         return;
@@ -872,6 +894,7 @@ const loadFile = function (str) {
     //console.log(array);
     let shape = getArrayShape(array);
     if (shape[0] < 1 || shape[1] < 1) {
+        alert('Invalid File!');
         return;
     }
     newSpreadsheet(shape[0], shape[1]);
@@ -888,7 +911,7 @@ const loadFile = function (str) {
     tbl.select(1, 'A');
 };
 
-const getArrayShape = function (array) {
+const getArrayShape = (array) => {
     let row = array.length;
     let col = -1;
     array.forEach(function (subArray) {
