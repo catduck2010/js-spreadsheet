@@ -93,6 +93,10 @@ const csv2array = (data) => {
 
 class ReferenceTree {
     constructor() {
+        // key uuid, val counts
+        this.nodes = new Map();
+        // key uuid: val uuid 
+        // key --> val a link for key refs to val
         this.graph = new Map();
     }
 
@@ -329,15 +333,15 @@ class Sheet { // spreadsheet data structure
             let res = this.getCellReference(thisCell, formula);
             const refs = res[0];
             let modifiedFormula = res[1];
-            refs.forEach((cell) => {
-                if (cell.label === thisCell.label) {
-                    throw 'There is one or more circular reference.';
-                }
-                modifiedFormula = modifiedFormula.replace('{-R-}',
-                    cell.getValue());
-            });
             let nval = null;
             try {
+                refs.forEach((cell) => {
+                    if (cell.label === thisCell.label) {
+                        throw new Error('There is one or more circular reference.');
+                    }
+                    modifiedFormula = modifiedFormula.replace('{-R-}',
+                        cell.getValue());
+                });
                 const cval = new Function('return ' + modifiedFormula + ';');
                 nval = cval();
                 if (nval != null) {
