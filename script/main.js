@@ -12,6 +12,10 @@ Array.prototype.remove = function (index) {
     }
 };
 
+Array.prototype.delete = function (item) {
+    this.remove(this.indexOf(item));
+};
+
 // generate a pseudo-GUID/UUID by concatenating random hexadecimal
 Math.uuid = function () {
     // generate four random hex digits
@@ -20,15 +24,19 @@ Math.uuid = function () {
 };
 //const oval = new Function('formula', 'return ' + formula.substring(1) + ';');
 
-const sum = function (str) {
+const divideSum = function (str) {
     let res = str.split(',');
     for (let i = 0; i < res.length; i++) {
         res[i] = res[i].trim().toUpperCase();
     }
-    doSum(res);
+    //doSum(res);
 };
 
-const doSum = function (arr) {
+const sum = function (arr) {
+
+};
+
+const boundSum = (str) => {
 
 };
 
@@ -91,17 +99,74 @@ const csv2array = (data) => {
     return arrData;
 };
 
-class ReferenceTree {
-    constructor() {
-        // key uuid, val counts
-        this.nodes = new Map();
-        // key uuid: val uuid 
+class RefTree {
+    constructor(map) {
+        // key node: val [ref1,...,refN]
         // key --> val a link for key refs to val
         this.graph = new Map();
+        this.reverseGraph = new Map();
+        this.cellMap = map;
     }
 
-    addReference(node, ref) {
+    setReferences(node, refs) {
+        this.graph.set(node, refs);
+        let cells = this.graph.get(node);
+        if (cells === undefined || cells === null || cells.length === 0) {
+            this.graph.delete(node);
+        }
+    }
 
+    tryReference(node, oldRefs, newRefs) {
+        // if has loop, return false
+        this.setReferences(node, newRefs);
+        let res = !this.hasLoop();
+        this.setReferences(node, oldRefs);
+        return res;
+    }
+
+    hasLoop() {
+        // try to find out if there is
+        // a loop in a DAG (Directed Acyclic Graph)
+        let visited = new Map();
+        // key: node, val: visiting(1)/visited(-1)
+        let flag = false;
+        let arrows = [];
+        const dfs = (node) => {
+            if (!flag && visited.has(node) && visited.get(node) === 1) {// pointing to a visiting node
+                flag = true;// a loop
+            } else if (!flag && !visited.has(node)) {//not visited
+                visited.set(node, 1);// visiting
+                let cells = this.graph.get(node);
+                if (cells !== undefined && cells != null && cells.length > 0) {
+                    cells.forEach((cell) => {
+                        // for testing
+                        arrows.push(node.label + " --> " + cell.label);
+                        dfs(cell);
+                    });
+                }
+                visited.set(node, -1);// visited
+            }
+        };
+        for (let node of this.graph.keys()) {
+            dfs(node);
+        }
+        console.log(arrows);
+        return flag;
+    }
+
+    updateValFormulas() {
+        // iterate by layer
+        let q = [];
+        for (let node of this.reverseGraph.entries()) {
+            q.push(node);
+        }
+        while (q.length !== 0) {
+            let node = q.shift();
+            node.refreshFormula(this.cellMap);
+            node.references.forEach((cell) => {
+                q.push(cell);
+            });
+        }
     }
 
 }
@@ -187,6 +252,7 @@ class Sheet { // spreadsheet data structure
         this.rowNum = rows;
         this.colNum = cols;
         this.cellMap = new Map();
+        this.refTree = new RefTree(this.cellMap);
         for (let i = 0; i < rows; i++) {
             let temp = [];
             for (let j = 0; j < cols; j++) {
@@ -282,6 +348,10 @@ class Sheet { // spreadsheet data structure
 
     getCellReference(cell, formula) {
         let str = formula.substring(1);
+        if (str.indexOf("SUM") !== -1) {
+            // replace SUM references
+        }
+        // then regular cell references
         const regEx = /(^|\+|-|\*|\/|\()([A-Z]+[1-9][0-9]*)/gi;
         let matches = [];
         let matchRes = null;
@@ -306,9 +376,9 @@ class Sheet { // spreadsheet data structure
 
     getStrBoard() {
         let res = [];
-        this.board.forEach(function (row) {
+        this.board.forEach((row) => {
             let temp = [];
-            row.forEach(function (cell) {
+            row.forEach((cell) => {
                 let val = cell.getValue();
                 if (!cell.isNum) {
                     let str = val;
@@ -329,35 +399,43 @@ class Sheet { // spreadsheet data structure
 
     updateCell(x, y, val, formula = null) { // update cell's content
         let thisCell = this.getCell(x, y);
-        if (formula != null) {
+        if (formula != null) { // the cell has formula
             let res = this.getCellReference(thisCell, formula);
             const refs = res[0];
             let modifiedFormula = res[1];
-            let nval = null;
+            let newVal = null;
             try {
                 refs.forEach((cell) => {
                     if (cell.label === thisCell.label) {
                         throw new Error('There is one or more circular reference.');
+                    } else if (cell.getValue().length < 1 || !cell.isNum) {
+                        throw new Error('Invalid number value at ' + cell.label);
                     }
                     modifiedFormula = modifiedFormula.replace('{-R-}',
                         cell.getValue());
                 });
-                const cval = new Function('return ' + modifiedFormula + ';');
-                nval = cval();
-                if (nval != null) {
-                    thisCell.setValue(nval);
+                if (!this.refTree.tryReference(thisCell, thisCell.references, refs)) {
+                    throw new Error('There is one or more circular reference.');
+                }
+                console.log(modifiedFormula);
+                const calcVal = new Function('return ' + modifiedFormula + ';');
+                newVal = calcVal();
+                if (newVal != null) {
+                    thisCell.setValue(newVal);
                     thisCell.formula = formula;
                     thisCell.formulaR = '=' + res[1];
                     thisCell.references = refs;
+                    this.refTree.setReferences(thisCell, thisCell.references);
                 }
             } catch (e) {
-                alert('Invalid formula: ' + e);
+                alert(e);
             }
-        } else {
+        } else { // the cell has no formula
             thisCell.setValue(val);
             thisCell.formula = null;
             thisCell.formulaR = null;
             thisCell.references = [];
+            this.refTree.setReferences(thisCell, thisCell.references);
         }
     }
 
@@ -392,7 +470,6 @@ class SheetTable { // data structure to present spreadsheet
         this.y = 'A';
         this.sheet = new Sheet(row, col);
         this.flags = [false, false];
-        this.listenersAdded = false;
         // row selected, column selected
 
         // constant elements
@@ -579,7 +656,7 @@ class SheetTable { // data structure to present spreadsheet
 
     selectRow(x) {
         this.unselect();
-        this.colBtns.forEach(function (btn) {
+        this.colBtns.forEach((btn) => {
             btn.parentElement.classList.add('selected-row-col');
         });
         let row = document.getElementById('row-btn-' + x);
@@ -598,7 +675,7 @@ class SheetTable { // data structure to present spreadsheet
 
     selectCol(y) {
         this.unselect();
-        this.rowBtns.forEach(function (btn) {
+        this.rowBtns.forEach((btn) => {
             btn.classList.add('selected-row-col');
         });
         let col = document.getElementById('col-btn-' + y).parentElement;
@@ -617,10 +694,10 @@ class SheetTable { // data structure to present spreadsheet
 
     selectAll() { // select & visualize all cells/row/column buttons
         this.unselect();
-        this.rowBtns.forEach(function (btn) {
+        this.rowBtns.forEach((btn) => {
             btn.classList.add('selected-row-col');
         });
-        this.colBtns.forEach(function (btn) {
+        this.colBtns.forEach((btn) => {
             btn.parentElement.classList.add('selected-row-col');
         });
         for (let i = 1; i <= this.sheet.rowNum; i++) {
@@ -642,10 +719,10 @@ class SheetTable { // data structure to present spreadsheet
         if (this.flags[0] === true) {
             if (this.flags[1] === true) {
                 // all selected
-                this.rowBtns.forEach(function (btn) {
+                this.rowBtns.forEach((btn) => {
                     btn.classList.remove('selected-row-col');
                 });
-                this.colBtns.forEach(function (btn) {
+                this.colBtns.forEach((btn) => {
                     btn.parentElement.classList.remove('selected-row-col');
                 });
                 for (let i = 1; i <= this.sheet.rowNum; i++) {
@@ -658,7 +735,7 @@ class SheetTable { // data structure to present spreadsheet
                 }
             } else {
                 // a row is selected
-                this.colBtns.forEach(function (btn) {
+                this.colBtns.forEach((btn) => {
                     btn.parentElement.classList.remove('selected-row-col');
                 });
                 let row = document.getElementById('row-btn-' + this.x);
@@ -674,7 +751,7 @@ class SheetTable { // data structure to present spreadsheet
         } else {
             if (this.flags[1] === true) {
                 // a column is selected
-                this.rowBtns.forEach(function (btn) {
+                this.rowBtns.forEach((btn) => {
                     btn.classList.remove('selected-row-col');
                 });
                 let col = document.getElementById('col-btn-' + this.y).parentElement;
@@ -880,7 +957,7 @@ let showMenu = (elementId) => {
     let elements = ["file2-menu", "edit-menu", "help-menu"];
     elements.remove(elements.indexOf(elementId));
     document.getElementById(elementId).classList.toggle("show");
-    elements.forEach(function (ele) {
+    elements.forEach((ele) => {
         let dd = document.getElementById(ele);
         if (dd.classList.contains('show')) {
             dd.classList.remove('show');
@@ -893,7 +970,7 @@ window.onclick = (e) => {
     const el = e.target;
     if (!el.matches('.drop-btn')) {
         let elements = ["file2-menu", "edit-menu", "help-menu"];
-        elements.forEach(function (ele) {
+        elements.forEach((ele) => {
             let dd = document.getElementById(ele);
             if (dd.classList.contains('show')) {
                 dd.classList.remove('show');
@@ -988,7 +1065,7 @@ const loadFile = (str) => {
 const getArrayShape = (array) => {
     let row = array.length;
     let col = -1;
-    array.forEach(function (subArray) {
+    array.forEach((subArray) => {
         col = Math.max(subArray.length, col);
     });
     return [row, col];
