@@ -104,7 +104,6 @@ class RefTree {
         // key node: val [ref1,...,refN]
         // key --> val a link for key refs to val
         this.graph = new Map();
-        this.reverseGraph = new Map();
         this.cellMap = map;
     }
 
@@ -155,18 +154,29 @@ class RefTree {
     }
 
     updateValFormulas() {
-        // iterate by layer
-        let q = [];
-        for (let node of this.reverseGraph.entries()) {
-            q.push(node);
+        // dfs, update from the bottom
+        let arrows = [];
+        let visited = new Map();
+        const dfs = (node) => {
+            if (!visited.has(node)) { // not visited
+                visited.set(node, 1); // visiting
+                let cells = this.graph.get(node);
+                if (cells !== undefined && cells != null && cells.length > 0) {
+                    cells.forEach((cell) => {
+                        // for testing
+                        arrows.push(node.label + " --> " + cell.label);
+                        dfs(cell);
+                    });
+                }
+                node.refreshFormula(this.cellMap);
+                console.log('Refreshed ' + node.label);
+                visited.set(node, -1);// visited
+            }
+        };
+        for (let node of this.graph.keys()) {
+            dfs(node);
         }
-        while (q.length !== 0) {
-            let node = q.shift();
-            node.refreshFormula(this.cellMap);
-            node.references.forEach((cell) => {
-                q.push(cell);
-            });
-        }
+        console.log(arrows);
     }
 
 }
@@ -235,7 +245,19 @@ class SheetCell {
                 this.setValue('#REF!');
             }
             this.formula = res;
+            this.refreshValue();
         }
+    }
+
+    refreshValue() {
+        let modifiedFormula = this.formulaR.substring(1);
+        this.references.forEach((cell) => {
+            modifiedFormula = modifiedFormula.replace('{-R-}',
+                cell.getValue());
+        });
+        const calcVal = new Function('return ' + modifiedFormula + ';');
+        this.val = calcVal();
+        this.cell.innerText = this.val;
     }
 
     parseFormula(formula) {
@@ -437,6 +459,7 @@ class Sheet { // spreadsheet data structure
             thisCell.references = [];
             this.refTree.setReferences(thisCell, thisCell.references);
         }
+        this.refTree.updateValFormulas();
     }
 
     letter2index(letter) {
