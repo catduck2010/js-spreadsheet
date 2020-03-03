@@ -393,7 +393,7 @@ class Sheet { // spreadsheet data structure
         let matches = [];
         let matchRes = null;
         while ((matchRes = sumEx.exec(str)) != null) {
-            str = str.replace(matchRes[2], '{-S-}');
+            str = str.replace(matchRes[2], '({-S-})');
             matches.push(matchRes[3]);
         }
         matches.forEach((match) => {
