@@ -3,17 +3,21 @@
 #### Lihang Zhou 001302072
 
 <div align="center">
-	<img src="pics/aqua2.gif" />
+	<img src="pics/za-warudo.gif" />
 </div>
+
+#### Features:
+* Decent Designs
+* Reference Tree to detect circular references
+
 
 #### Technologies Used:
 * Google Web Font(Open Sans, Noto Sans HK/KR/JP);
 * node-sass
-* node-rxjs
-* node-csv
+* RxJS
 
 #### Requirements:
-* Internet;
+* Internet (Fonts & RxJS);
 * nodejs & npm;
 
 #### How To Run:
@@ -27,11 +31,8 @@
 > 
 > User Requirements:
 > 
-> 1. As a user, I should be able to add rows to the spreadsheet using a plus button.
-> 2. As a user, I should be able to add columns to the spreadsheet using a plus button.
-> 3. As a user, I should be able to delete rows on the spreadsheet using a minus button.
-> 4. As a user, I should be able to delete columns on the spreadsheet using a minus button.
-> 5. As a user, I should be able to select multiple rows or columns and display their sum in a cell by using a formula. The formula should be of the format "=SUM(START\_CELL:END\_CELL)". Example "=SUM(A1:A10)" to display the sum of all items from cell A1 to A10. Any changes to the cell content in the selected range should update the sum.
+> 1. As a user, I should be able to add/delete rows/columns to the spreadsheet using specific buttons.
+> 2. As a user, I should be able to select multiple rows or columns and display their sum in a cell by using a formula. The formula should be of the format "=SUM(START\_CELL:END\_CELL)". Example "=SUM(A1:A10)" to display the sum of all items from cell A1 to A10. Any changes to the cell content in the selected range should update the sum.
 > 6. As a user, I should be able to perform simple algebraic operations (+, -, *, /) with cell references. Example "=A1+A2".
 > 7. As a user, I should be able to export the sheet as a CSV file.
 > 8. As a user, I should be able to load a CSV from the node server on clicking a load button.
