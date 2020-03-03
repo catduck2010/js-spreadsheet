@@ -188,6 +188,7 @@ class SheetCell {
         this.isNum = false;
         this.val = ''; //stores value
         this.references = [];
+        this.sumReferences = [];
         this.cell = null; // store the cell that represents it on the sheet table
         this.formula = null; // stores formula
         this.formulaR = null;
@@ -370,9 +371,6 @@ class Sheet { // spreadsheet data structure
 
     getCellReference(cell, formula) {
         let str = formula.substring(1);
-        if (str.indexOf("SUM") !== -1) {
-            // replace SUM references
-        }
         // then regular cell references
         const regEx = /(^|\+|-|\*|\/|\()([A-Z]+[1-9][0-9]*)/gi;
         let matches = [];
@@ -387,6 +385,70 @@ class Sheet { // spreadsheet data structure
             modified = modified.replace(label, '{-R-}');
         });
         return [cells, modified];
+    }
+
+    parseSumFunction(cell, formula) {
+        let str = formula;
+        const sumEx = /(^|\+|-|\*|\/|\()(SUM\(([A-Z0-9,:]*)\))/gi;
+        let matches = [];
+        let matchRes = null;
+        while ((matchRes = sumEx.exec(str)) != null) {
+            str = str.replace(matchRes[2], '{-S-}');
+            matches.push(matchRes[3]);
+        }
+        matches.forEach((match) => {
+            processSumArgs(match);
+        });
+
+    }
+
+    processSumArgs(thisCell, arg) {
+        //const calcVal = new Function('return ' + modifiedFormula + ';');
+        let sumRefs = [];
+        let sumNums = [];
+        const labelEx = /^[A-Z]+[1-9][0-9]*$/;
+        let args = arg.split(',');
+        args.forEach((a) => {
+            if (a.indexOf(':') !== -1) {
+                let as = a.split(':');
+                if (!labelEx.test(as[0]) || !labelEx.test(as[1])) {
+                    throw new Error('Wrong Reference!');
+                }
+                let labels = this.expandSumReference(as[0], as[1]);
+                let refs = this.convertSumReference(labels);
+                refs.forEach((cell) => {
+                    sumRefs.push(cell);
+                });
+            } else if (labelEx.test(a)) {
+                let cell = this.getCellByLabel(a);
+                sumRefs.push(cell);
+            } else { // a formula
+                let calc = this.calcFormula(thisCell, a);
+                let val = calc[0];
+                sumNums.push(val);
+            }
+        });
+    }
+
+    calcFormula(thisCell, formula) {
+        let res = this.getCellReference(cell, '=' + formula);
+        const refs = res[0];
+        let modifiedFormula = res[1];
+
+        refs.forEach((cell) => {
+            if (cell.label === thisCell.label) {
+                throw new Error('There is one or more circular reference.');
+            } else if (cell.getValue().length < 1 || !cell.isNum) {
+                throw new Error('Invalid number value at ' + cell.label);
+            }
+            modifiedFormula = modifiedFormula.replace('{-R-}',
+                cell.getValue());
+        });
+
+        const calcVal = new Function('return ' + modifiedFormula + ';');
+        let val = calcVal();
+
+        return [val, refs, '=' + modifiedFormula];
     }
 
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
@@ -422,11 +484,15 @@ class Sheet { // spreadsheet data structure
     updateCell(x, y, val, formula = null) { // update cell's content
         let thisCell = this.getCell(x, y);
         if (formula != null) { // the cell has formula
-            let res = this.getCellReference(thisCell, formula);
-            const refs = res[0];
-            let modifiedFormula = res[1];
-            let newVal = null;
             try {
+                if (formula.indexOf('SUM') !== -1) { // the cell has sum function
+
+                }
+                let res = this.getCellReference(thisCell, formula);
+                const refs = res[0];
+                let modifiedFormula = res[1];
+                let newVal = null;
+
                 refs.forEach((cell) => {
                     if (cell.label === thisCell.label) {
                         throw new Error('There is one or more circular reference.');
@@ -483,6 +549,36 @@ class Sheet { // spreadsheet data structure
             n = Math.floor(n / len) - 1;
         }
         return s;
+    }
+
+    expandSumReference(label1, label2) {
+        let labels = [];
+        const convert = this.board[0][0].convertLabel;
+        let index1 = convert(label1);
+        let index2 = convert(label2);
+        for (let i = 0; i < 2; i++) { // index1 < index2
+            if (index1[i] > index2[i]) {
+                const temp = index1[i];
+                index1[i] = index2[i];
+                index2[i] = temp;
+            }
+        }
+        for (let i = index1[0]; i <= index2[0]; i++) {
+            for (let j = this.letter2index(index1[1]);
+                 j <= this.letter2index(index2[1]);
+                 j++) {
+                labels.push(this.index2letter(j) + i);
+            }
+        }
+        return labels;
+    }
+
+    convertSumReference(labels) {
+        let cells = [];
+        labels.forEach((lbl) => {
+            cells.push(this.getCellByLabel(lbl));
+        });
+        return cells;
     }
 }
 
