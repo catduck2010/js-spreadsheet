@@ -45,17 +45,17 @@
 
 
     <div class="edit-bar">
-        <input class="locator" id="locator" type="text" value="A1">
+        <input class="locator" id="locator" type="text" value="A1" title="Name Box">
         <button class="button edit-button red disabled-button"
-                onclick="document.sheetTable.clickCross(this)" id="cross-btn"><strong>✗</strong>
+                onclick="document.sheetTable.clickCross(this)" id="cross-btn" title="Cancel"><strong>✗</strong>
         </button>
         <button class="button edit-button green disabled-button"
-                onclick="document.sheetTable.clickCheck(this)" id="check-btn"><strong>✓</strong>
+                onclick="document.sheetTable.clickCheck(this)" id="check-btn" title="Enter"><strong>✓</strong>
         </button>
         <button class="button edit-button blue disabled-button"
-                onclick="document.sheetTable.clickFx(this)" id="fx-btn"><strong>=</strong>
+                onclick="document.sheetTable.clickFx(this)" id="fx-btn" title="Insert Function"><strong>=</strong>
         </button>
-        <input class="edit-area" id="text-edit" type="text">
+        <input class="edit-area" id="text-edit" type="text" title="Formula Bar">
     </div>
 
     <div class="table-head upper-grid" style="background: gray">
