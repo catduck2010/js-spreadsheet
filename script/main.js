@@ -155,7 +155,35 @@ class RefTree {
 
     updateValFormulas() {
         // dfs, update from the bottom
+        this._rxjsUpdateValFormulas();
+        // let arrows = [];
+        // let visited = new Map();
+        // const dfs = (node) => {
+        //     if (!visited.has(node)) { // not visited
+        //         visited.set(node, 1); // visiting
+        //         let cells = this.graph.get(node);
+        //         if (cells !== undefined && cells != null && cells.length > 0) {
+        //             cells.forEach((cell) => {
+        //                 // for testing
+        //                 arrows.push(node.label + " --> " + cell.label);
+        //                 dfs(cell);
+        //             });
+        //         }
+        //         node.refreshFormula(this.cellMap);
+        //         console.log('Refreshed ' + node.label);
+        //         visited.set(node, -1);// visited
+        //     }
+        // };
+        // for (let node of this.graph.keys()) {
+        //     dfs(node);
+        // }
+        // console.log(arrows);
+    }
+
+    _rxjsUpdateValFormulas() {
+        // refactored version
         let arrows = [];
+        let values = [];
         let visited = new Map();
         const dfs = (node) => {
             if (!visited.has(node)) { // not visited
@@ -168,14 +196,28 @@ class RefTree {
                         dfs(cell);
                     });
                 }
-                node.refreshFormula(this.cellMap);
-                console.log('Refreshed ' + node.label);
+                values.push(node);
+                //node.refreshFormula(this.cellMap);
+                //console.log('Refreshed ' + node.label);
                 visited.set(node, -1);// visited
             }
         };
         for (let node of this.graph.keys()) {
             dfs(node);
         }
+
+        // const cellIterator = rxjs.Observable.create(function (observer) {
+        //     values.forEach((cell) => {
+        //         observer.next(cell);
+        //     });
+        // });
+
+        const cellIterator = rxjs.from(values);
+
+        cellIterator.subscribe(cell => {
+            cell.refreshFormula(this.cellMap);
+        });
+        //console.log('Refresh Order: ' + values);
         console.log(arrows);
     }
 
@@ -1192,6 +1234,27 @@ const getArrayShape = (array) => {
 
 newSpreadsheet();
 syncScroll();
+
+const testFunction2 = () => {
+    class TestCell {
+        constructor(label) {
+            this.label = label;
+        }
+    }
+
+    let cells = [];
+    for (let i = 1; i <= 10; i++) {
+        cells.push(new TestCell('A' + i));
+    }
+
+    const ob = rxjs.Observable.create(function (observer) {
+        cells.forEach((cell) => {
+            observer.next(cell)
+        });
+    });
+
+    ob.subscribe(cell => console.log(cell.label));
+};
 
 
 

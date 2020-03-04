@@ -1,3 +1,5 @@
+//import {Observable} from "rxjs";
+
 const log = (data) => {
     console.log(data)
 };
@@ -44,9 +46,20 @@ const testFunction = () => {
     // log(str);
 };
 
-const testFunction2 = (str1, str2) => {
+// class TestCell {
+//     constructor(label) {
+//         this.label = label;
+//     }
+// }
+//
+// let cells = [];
+// for (let i = 1; i <= 10; i++) {
+//     cells.push(new TestCell('A' + i));
+// }
+//
+// const ob = Observable.of(cells);
+//
+// ob.subscribe(cell => console.log(cell.label));
 
-};
-
-testFunction();
+//testFunction();
 
