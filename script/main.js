@@ -115,11 +115,12 @@ class RefTree {
         }
     }
 
-    tryReference(node, oldRefs, newRefs) {
+    tryReference(node, newRefs) {
+        let old = this.graph.get(node);
         // if has loop, return false
         this.setReferences(node, newRefs);
         let res = !this.hasLoop();
-        this.setReferences(node, oldRefs);
+        this.setReferences(node, old);
         return res;
     }
 
@@ -231,6 +232,8 @@ class SheetCell {
         this.val = ''; //stores value
         this.references = [];
         this.sumReferences = [];
+        // =SUM(A1:A2)+SUM(B1:B5)
+        // [[A1,A2],[B1,B5]] (cells)
         this.cell = null; // store the cell that represents it on the sheet table
         this.formula = null; // stores formula
         this.formulaR = null;
@@ -272,10 +275,34 @@ class SheetCell {
         }
     }
 
-    refreshFormula(map) {
+    calcSum(sheet) {
+        const sum = rxjs.Observable.create((observer) => {
+            let cells = [];
+            this.sumReferences.forEach((pair) => {
+                cells = sheet.expandSumReference(pair[0].label, pair[1].label);
+            });
+        });
+
+    }
+
+    refreshFormula(map) { // AUTOMATICALLY refresh formula
         if (this.formula !== null) {
+
             let res = this.formulaR;
             let flag = false;
+            if (this.sumReferences.length > 0) {
+                this.sumReferences.forEach((pair) => {
+                    if (map.has(pair[0].uuid)
+                        && map.has(pair[1].uuid)) {
+                        res = res.replace(
+                            '({-S-})',
+                            'SUM(' + pair[0].label + ':' + pair[1].label + ')');
+                    } else {
+                        flag = true;
+                        res = res.replace('({-S-})', 'SUM(#REF!:#REF!)');
+                    }
+                });
+            }
             this.references.forEach((cell) => {
                 if (map.has(cell.uuid)) {
                     res = res.replace('{-R-}', cell.label);
@@ -292,19 +319,29 @@ class SheetCell {
         }
     }
 
-    refreshValue() {
-        let modifiedFormula = this.formulaR.substring(1);
-        this.references.forEach((cell) => {
-            modifiedFormula = modifiedFormula.replace('{-R-}',
-                cell.getValue());
-        });
-        const calcVal = new Function('return ' + modifiedFormula + ';');
-        this.val = calcVal();
-        this.cell.innerText = this.val;
-    }
-
-    parseFormula(formula) {
-
+    refreshValue() { // AUTOMATICALLY refresh value
+        const sheet = document.sheetTable.sheet;
+        try {
+            let modifiedFormula = this.formulaR.substring(1);
+            if (this.sumReferences.length > 0) {
+                this.sumReferences.forEach((pair) => {
+                    modifiedFormula = modifiedFormula.replace('{-S-}',
+                        '' + sheet.calcSum(sheet.expandSumReference(
+                        pair[0].label,
+                        pair[1].label
+                        )));
+                });
+            }
+            this.references.forEach((cell) => {
+                modifiedFormula = modifiedFormula.replace('{-R-}',
+                    cell.getValue());
+            });
+            const calcVal = new Function('return ' + modifiedFormula + ';');
+            this.val = calcVal();
+            this.cell.innerText = this.val;
+        } catch (e) {
+            this.setValue('#REF!');
+        }
     }
 
 
@@ -328,6 +365,29 @@ class Sheet { // spreadsheet data structure
             }
             this.board.push(temp);
         }
+    }
+
+    letter2index(letter) {
+        let str = letter.toUpperCase();
+        let num = 0, increase = 0;
+        for (let i = str.length - 1; i >= 0; i--) {
+            num += increase + str.charCodeAt(i) - 'A'.charCodeAt(0);
+            increase += 26;
+        }
+        //console.log(num);
+        return num;
+    }
+
+    index2letter(n) {
+        const ordA = 'A'.charCodeAt(0);
+        const ordZ = 'Z'.charCodeAt(0);
+        const len = ordZ - ordA + 1;
+        let s = "";
+        while (n >= 0) {
+            s = String.fromCharCode(n % len + ordA) + s;
+            n = Math.floor(n / len) - 1;
+        }
+        return s;
     }
 
     toCSV() {
@@ -393,14 +453,6 @@ class Sheet { // spreadsheet data structure
         this.updateLabel(0, at);
     }
 
-    updateLabel(startRow = 0, startCol = 0) {
-        for (let i = startRow; i < this.rowNum; i++) {
-            for (let j = startCol; j < this.colNum; j++) {
-                this.board[i][j].setLabel(i + 1, this.index2letter(j));
-            }
-        }
-    }
-
     getCellByID(id) {
         return this.cellMap.get(id);
     }
@@ -411,86 +463,57 @@ class Sheet { // spreadsheet data structure
         return this.getCell(res[0], res[1]);
     }
 
+    updateLabel(startRow = 0, startCol = 0) {
+        for (let i = startRow; i < this.rowNum; i++) {
+            for (let j = startCol; j < this.colNum; j++) {
+                this.board[i][j].setLabel(i + 1, this.index2letter(j));
+            }
+        }
+    }
+
     getCellReference(cell, formula) {
         let str = formula.substring(1);
+        let modified = str.substring(0);
         // then regular cell references
         const regEx = /(^|\+|-|\*|\/|\()([A-Z]+[1-9][0-9]*)/gi;
-        let matches = [];
+        let cells = [];
         let matchRes = null;
         while ((matchRes = regEx.exec(str)) != null) {
-            matches.push(matchRes[2]);
-        }
-        let cells = [];
-        let modified = str.substring(0);
-        matches.forEach((label) => {
-            cells.push(this.getCellByLabel(label));
+            let label = matchRes[2];
             modified = modified.replace(label, '{-R-}');
-        });
+            cells.push(this.getCellByLabel(label));
+        }
         return [cells, modified];
     }
 
-    parseSumFunction(cell, formula) {
-        let str = formula;
-        const sumEx = /(^|\+|-|\*|\/|\()(SUM\(([A-Z0-9,:]*)\))/gi;
-        let matches = [];
-        let matchRes = null;
-        while ((matchRes = sumEx.exec(str)) != null) {
-            str = str.replace(matchRes[2], '({-S-})');
-            matches.push(matchRes[3]);
-        }
-        matches.forEach((match) => {
-            processSumArgs(match);
-        });
-
-    }
-
-    processSumArgs(thisCell, arg) {
-        //const calcVal = new Function('return ' + modifiedFormula + ';');
+    parseSumFunction(thisCell, formula) {
+        let str = formula.substring(0);
         let sumRefs = [];
-        let sumNums = [];
-        const labelEx = /^[A-Z]+[1-9][0-9]*$/;
-        let args = arg.split(',');
-        args.forEach((a) => {
-            if (a.indexOf(':') !== -1) {
-                let as = a.split(':');
-                if (!labelEx.test(as[0]) || !labelEx.test(as[1])) {
-                    throw new Error('Wrong Reference!');
-                }
-                let labels = this.expandSumReference(as[0], as[1]);
-                let refs = this.convertSumReference(labels);
-                refs.forEach((cell) => {
-                    sumRefs.push(cell);
-                });
-            } else if (labelEx.test(a)) {
-                let cell = this.getCellByLabel(a);
-                sumRefs.push(cell);
-            } else { // a formula
-                let calc = this.calcFormula(thisCell, a);
-                let val = calc[0];
-                sumNums.push(val);
+        const sumEx = /(^|\+|-|\*|\/|\(|=)(SUM\(([A-Z0-9,:]*)\))/gi;
+        let matchRes = null;
+        while ((matchRes = sumEx.exec(str)) != null) { // Found SUM(...)
+            str = str.replace(matchRes[2], '({-S-})');
+            let args = this.processSumArg(matchRes[3]);
+            if (args === null || args === undefined || args.length !== 2) {
+                throw new Error('Syntax Error on function SUM!');
             }
-        });
+            sumRefs.push(args);
+        }
+        return [sumRefs, str];
     }
 
-    calcFormula(thisCell, formula) {
-        let res = this.getCellReference(cell, '=' + formula);
-        const refs = res[0];
-        let modifiedFormula = res[1];
+    processSumArg(arg) {
+        let sumRef = [];
+        const labelEx = /^[A-Z]+[1-9][0-9]*$/;
 
-        refs.forEach((cell) => {
-            if (cell.label === thisCell.label) {
-                throw new Error('There is one or more circular reference.');
-            } else if (cell.getValue().length < 1 || !cell.isNum) {
-                throw new Error('Invalid number value at ' + cell.label);
+        if (arg.indexOf(':') !== -1) { // when there is a colon
+            let as = arg.split(':');
+            if (as.length !== 2 || !labelEx.test(as[0]) || !labelEx.test(as[1])) {
+                throw new Error('Wrong Reference!');
             }
-            modifiedFormula = modifiedFormula.replace('{-R-}',
-                cell.getValue());
-        });
-
-        const calcVal = new Function('return ' + modifiedFormula + ';');
-        let val = calcVal();
-
-        return [val, refs, '=' + modifiedFormula];
+            sumRef = [this.getCellByLabel(as[0]), this.getCellByLabel(as[1])];
+        }
+        return sumRef;
     }
 
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
@@ -527,24 +550,43 @@ class Sheet { // spreadsheet data structure
         let thisCell = this.getCell(x, y);
         if (formula != null) { // the cell has formula
             try {
+                let modifiedFormula = formula.substring(0);
+                let sumRefs = [];
                 if (formula.indexOf('SUM') !== -1) { // the cell has sum function
-
+                    let result = this.parseSumFunction(thisCell, modifiedFormula);
+                    sumRefs = result[0];
+                    modifiedFormula = result[1];
                 }
-                let res = this.getCellReference(thisCell, formula);
+                console.log(modifiedFormula);
+                let expRefs = this.expandAllColonReference(sumRefs);
+                let res = this.getCellReference(thisCell, modifiedFormula);// = removed
                 const refs = res[0];
-                let modifiedFormula = res[1];
+                modifiedFormula = res[1];
                 let newVal = null;
 
-                refs.forEach((cell) => {
+                refs.concat(expRefs).forEach(cell => {
                     if (cell.label === thisCell.label) {
                         throw new Error('There is one or more circular reference.');
                     } else if (cell.getValue().length < 1 || !cell.isNum) {
                         throw new Error('Invalid number value at ' + cell.label);
                     }
+                });
+
+                sumRefs.forEach(pair => {
+                    modifiedFormula = modifiedFormula.replace("{-S-}",
+                        '' + this.calcSum(this.expandSumReference(
+                        pair[0].label,
+                        pair[1].label
+                        )));
+                });
+
+                refs.forEach(cell => {
                     modifiedFormula = modifiedFormula.replace('{-R-}',
                         cell.getValue());
                 });
-                if (!this.refTree.tryReference(thisCell, thisCell.references, refs)) {
+
+                if (!this.refTree.tryReference(thisCell,
+                    refs.concat(expRefs))) {
                     throw new Error('There is one or more circular reference.');
                 }
                 console.log(modifiedFormula);
@@ -555,7 +597,9 @@ class Sheet { // spreadsheet data structure
                     thisCell.formula = formula;
                     thisCell.formulaR = '=' + res[1];
                     thisCell.references = refs;
-                    this.refTree.setReferences(thisCell, thisCell.references);
+                    thisCell.sumReferences = sumRefs;
+                    this.refTree.setReferences(thisCell,
+                        thisCell.references.concat(expRefs));
                 }
             } catch (e) {
                 alert(e);
@@ -564,34 +608,32 @@ class Sheet { // spreadsheet data structure
             thisCell.setValue(val);
             thisCell.formula = null;
             thisCell.formulaR = null;
+            thisCell.sumReferences = [];
             thisCell.references = [];
             this.refTree.setReferences(thisCell, thisCell.references);
         }
         this.refTree.updateValFormulas();
     }
 
-    letter2index(letter) {
-        let str = letter.toUpperCase();
-        let num = 0, increase = 0;
-        for (let i = str.length - 1; i >= 0; i--) {
-            num += increase + str.charCodeAt(i) - 'A'.charCodeAt(0);
-            increase += 26;
-        }
-        //console.log(num);
-        return num;
+    expandAllColonReference(sumRefs) {
+        let cells = [];
+        sumRefs.forEach((pair) => {
+            let refs = this.expandSumReference(pair[0].label, pair[1].label);
+            refs.forEach((cell) => {
+                cells.push(cell);
+            });
+        });
+        return cells;
     }
 
-    index2letter(n) {
-        const ordA = 'A'.charCodeAt(0);
-        const ordZ = 'Z'.charCodeAt(0);
-        const len = ordZ - ordA + 1;
-        let s = "";
-        while (n >= 0) {
-            s = String.fromCharCode(n % len + ordA) + s;
-            n = Math.floor(n / len) - 1;
-        }
-        return s;
+    calcSum(cells) {
+        let sum = 0;
+        cells.forEach(cell => {
+            sum += cell.getValue();
+        });
+        return sum;
     }
+
 
     expandSumReference(label1, label2) {
         let labels = [];
@@ -612,7 +654,7 @@ class Sheet { // spreadsheet data structure
                 labels.push(this.index2letter(j) + i);
             }
         }
-        return labels;
+        return this.convertSumReference(labels);
     }
 
     convertSumReference(labels) {
