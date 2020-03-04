@@ -1,4 +1,5 @@
 // const rxjs = require('rxjs');
+const from = rxjs.from;
 let listenersAdded = false;
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
@@ -12,93 +13,15 @@ Array.prototype.remove = function (index) {
     }
 };
 
-Array.prototype.delete = function (item) {
-    this.remove(this.indexOf(item));
-};
-
 // generate a pseudo-GUID/UUID by concatenating random hexadecimal
 Math.uuid = function () {
     // generate four random hex digits
     const S4 = () => (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
 };
-//const oval = new Function('formula', 'return ' + formula.substring(1) + ';');
 
-const divideSum = function (str) {
-    let res = str.split(',');
-    for (let i = 0; i < res.length; i++) {
-        res[i] = res[i].trim().toUpperCase();
-    }
-    //doSum(res);
-};
-
-const sum = function (arr) {
-
-};
-
-const boundSum = (str) => {
-
-};
-
-const handleFile = (file) => {
-    let reader = new FileReader();
-    reader.readAsText(file);
-    reader.onload = function (e) {
-        loadFile(e.target.result);
-    };
-    reader.onerror = function (e) {
-        alert('Something Wrong: ' + e);
-    };
-};
-
-const createAndDownloadFile = (fileName, content) => {
-    let aTag = document.createElement('a');
-    let blob = new Blob([`\ufeff${content}`], {type: 'text/plain;charset=utf-8'});
-    // let blob = new Blob([content]);
-    aTag.download = fileName;
-    aTag.href = URL.createObjectURL(blob);
-    aTag.click();
-    URL.revokeObjectURL(blob);
-};
-
-const csv2array = (data) => {
-    let matchedVal, delimiter = ',';
-    // regular expression to parse the CSV data
-    const csvPattern = /(,|\r?\n|\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^",\r\n]*))/gi;
-
-    //console.log(csvPattern);
-    // parsed data with default empty first row.
-    let arrData = [[]];
-
-    // Create an array to hold our individual pattern
-    // matching groups.
-    let matches = null;
-
-    // Keep looping over the regular expression matches until we can no longer find a match.
-    while ((matches = csvPattern.exec(data)) != null) {
-        // get the delimiter found
-        let matchedDelimiter = matches[1];
-
-        // Check to see if the given delimiter has a length (is not the start of string) and if it matches
-        // field delimiter. If id does not, then we know that this delimiter is a row delimiter.
-        if (matchedDelimiter.length && (matchedDelimiter !== delimiter)) { // when delimiter === ''
-            // new row
-            arrData.push([]);
-        }
-        // check quoted or unquoted content
-        if (matches[2]) { // quoted
-            matchedVal = matches[2].replace(/""/g, '"');
-        } else { // unquoted
-            matchedVal = matches[3];
-        }
-        // push to last row
-        arrData[arrData.length - 1].push(matchedVal);
-    }
-
-    // return the parsed data.
-    return arrData;
-};
-
+// data structure for checking circular references
+// and determine the order of updating cells
 class RefTree {
     constructor(map) {
         // key node: val [ref1,...,refN]
@@ -107,6 +30,7 @@ class RefTree {
         this.cellMap = map;
     }
 
+    // set references
     setReferences(node, refs) {
         this.graph.set(node, refs);
         let cells = this.graph.get(node);
@@ -115,6 +39,7 @@ class RefTree {
         }
     }
 
+    // try if the new references have circular references
     tryReference(node, newRefs) {
         let old = this.graph.get(node);
         // if has loop, return false
@@ -213,7 +138,7 @@ class RefTree {
         //     });
         // });
 
-        const cellIterator = rxjs.from(values);
+        const cellIterator = from(values);
 
         cellIterator.subscribe(cell => {
             cell.refreshFormula(this.cellMap);
@@ -224,6 +149,7 @@ class RefTree {
 
 }
 
+// data structure for a cell in Class Sheet
 class SheetCell {
     constructor() {
         this.uuid = Math.uuid();
@@ -234,9 +160,9 @@ class SheetCell {
         this.sumReferences = [];
         // =SUM(A1:A2)+SUM(B1:B5)
         // [[A1,A2],[B1,B5]] (cells)
-        this.cell = null; // store the cell that represents it on the sheet table
-        this.formula = null; // stores formula
-        this.formulaR = null;
+        this.cell = null; // store the cell(-div) that represents it on the sheet table
+        this.formula = null; // stores text formula
+        this.formulaR = null; // stores ACTUAL formula
     }
 
     convertLabel(label) { // convert 'A1' to [1,'A']
@@ -273,16 +199,16 @@ class SheetCell {
             this.isNum = true;
             this.val = Number(val);
         }
+        this.cell.innerText = this.val + '';
+        this.cell.setAttribute('title', this.val);
     }
 
-    calcSum(sheet) {
-        const sum = rxjs.Observable.create((observer) => {
-            let cells = [];
-            this.sumReferences.forEach((pair) => {
-                cells = sheet.expandSumReference(pair[0].label, pair[1].label);
-            });
-        });
-
+    calcSumPair(pair) {
+        const sheet = document.sheetTable.sheet;
+        return sheet.calcSum(sheet.expandSumReference(
+            pair[0].label,
+            pair[1].label
+        ));
     }
 
     refreshFormula(map) { // AUTOMATICALLY refresh formula
@@ -320,25 +246,21 @@ class SheetCell {
     }
 
     refreshValue() { // AUTOMATICALLY refresh value
-        const sheet = document.sheetTable.sheet;
         try {
             let modifiedFormula = this.formulaR.substring(1);
             if (this.sumReferences.length > 0) {
                 this.sumReferences.forEach((pair) => {
                     modifiedFormula = modifiedFormula.replace('{-S-}',
-                        '' + sheet.calcSum(sheet.expandSumReference(
-                        pair[0].label,
-                        pair[1].label
-                        )));
+                        '' + this.calcSumPair(pair));
                 });
             }
             this.references.forEach((cell) => {
                 modifiedFormula = modifiedFormula.replace('{-R-}',
                     cell.getValue());
             });
+            //console.log('=' + modifiedFormula);
             const calcVal = new Function('return ' + modifiedFormula + ';');
-            this.val = calcVal();
-            this.cell.innerText = this.val;
+            this.setValue(calcVal());
         } catch (e) {
             this.setValue('#REF!');
         }
@@ -354,6 +276,7 @@ class Sheet { // spreadsheet data structure
         this.rowNum = rows;
         this.colNum = cols;
         this.cellMap = new Map();
+        // cellMap is used for constructing reference tree && check if a cell is deleted
         this.refTree = new RefTree(this.cellMap);
         for (let i = 0; i < rows; i++) {
             let temp = [];
@@ -367,6 +290,7 @@ class Sheet { // spreadsheet data structure
         }
     }
 
+    // convert 'A' to 0, ..., 'AA' to 26, etc.
     letter2index(letter) {
         let str = letter.toUpperCase();
         let num = 0, increase = 0;
@@ -378,6 +302,7 @@ class Sheet { // spreadsheet data structure
         return num;
     }
 
+    // convert 0 to 'A', ..., 26 to 'AA', etc.
     index2letter(n) {
         const ordA = 'A'.charCodeAt(0);
         const ordZ = 'Z'.charCodeAt(0);
@@ -390,6 +315,7 @@ class Sheet { // spreadsheet data structure
         return s;
     }
 
+    // convert sheet data to string (for export)
     toCSV() {
         let rows = this.getStrBoard();
         return rows.map(e => e.join(",")).join("\n");
@@ -469,6 +395,7 @@ class Sheet { // spreadsheet data structure
                 this.board[i][j].setLabel(i + 1, this.index2letter(j));
             }
         }
+        this.refTree.updateValFormulas();
     }
 
     getCellReference(cell, formula) {
@@ -610,7 +537,7 @@ class Sheet { // spreadsheet data structure
             thisCell.formulaR = null;
             thisCell.sumReferences = [];
             thisCell.references = [];
-            this.refTree.setReferences(thisCell, thisCell.references);
+            this.refTree.setReferences(thisCell, []);
         }
         this.refTree.updateValFormulas();
     }
@@ -629,7 +556,11 @@ class Sheet { // spreadsheet data structure
     calcSum(cells) {
         let sum = 0;
         cells.forEach(cell => {
-            sum += cell.getValue();
+            if (cell.isNum) {
+                sum += cell.getValue();
+            } else {
+                throw new Error('An invalid number at ' + cell.label + '!');
+            }
         });
         return sum;
     }
@@ -731,18 +662,21 @@ class SheetTable { // data structure to present spreadsheet
         }
     }
 
+    // when click cancel button
     clickCross(button) {
         this.setLocator();
         button.blur();
         this.disableButtons();
     }
 
+    // click enter button
     clickCheck(button) {
         this.editCell();
         button.blur();
         this.disableButtons();
     }
 
+    // click the '=' button
     clickFx(button) {
         let val = this.textedit.value;
         if (val.length === 0 || (val.length > 0 && val.charAt(0) !== '=')) {
@@ -782,6 +716,7 @@ class SheetTable { // data structure to present spreadsheet
         this.disableButtons();
     }
 
+    // make contents in the cell the same as text in function bar
     syncTextEdit() {
         let divCell = this.sheet.getCell(this.x, this.y).cell;
         divCell.innerText = this.textedit.value;
@@ -789,20 +724,19 @@ class SheetTable { // data structure to present spreadsheet
 
     getTableCells() { // make indexes of all cells
         let buttons = [];
-        let sheetTable = this;
         for (let i = 1; i <= this.sheet.rowNum; i++) {
             let row = [];
             for (let j = 0; j < this.sheet.colNum; j++) {
                 let letter = this.sheet.index2letter(j);
                 let cell = document.getElementById(letter + '-cell-' + i);
-                cell.parentElement.addEventListener("click", function () {
-                    sheetTable.select(i, letter);
+                cell.parentElement.addEventListener("click", () => {
+                    this.select(i, letter);
                 });
-                cell.parentElement.addEventListener("dblclick", function () {
-                    sheetTable.select(i, letter);
-                    sheetTable.textedit.focus();
+                cell.parentElement.addEventListener("dblclick", () => {
+                    this.select(i, letter);
+                    this.textedit.focus();
                 });
-                cell.setAttribute('title', sheetTable.sheet.getCell(i, letter).getValue());
+                cell.setAttribute('title', this.sheet.getCell(i, letter).getValue());
                 this.sheet.getCell(i, letter).cell = cell;
                 row.push(cell);
             }
@@ -813,12 +747,11 @@ class SheetTable { // data structure to present spreadsheet
 
     getRowButtons() { // make row buttons able to select a row
         let res = [];
-        let sheetTable = this;
         for (let i = 1; i <= this.sheet.rowNum; i++) {
             let btn = document.getElementById('row-btn-' + i);
 
-            btn.addEventListener("click", function () {
-                sheetTable.selectRow(i);
+            btn.addEventListener("click", () => {
+                this.selectRow(i);
             });
             res.push(btn);
         }
@@ -827,12 +760,11 @@ class SheetTable { // data structure to present spreadsheet
 
     getColButtons() { // make column buttons able to select a column
         let res = [];
-        let sheetTable = this;
         for (let i = 0; i < this.sheet.colNum; i++) {
             let letter = this.sheet.index2letter(i);
             let btn = document.getElementById('col-btn-' + letter);
-            btn.addEventListener("click", function () {
-                sheetTable.selectCol(letter);
+            btn.addEventListener("click", () => {
+                this.selectCol(letter);
             });
             res.push(btn);
         }
@@ -1123,11 +1055,12 @@ class SheetTable { // data structure to present spreadsheet
         let sheetCell = this.sheet.getCell(this.x, this.y);
         let cell = sheetCell.cell;
         const value = sheetCell.getValue();
-        cell.innerHTML = value;
+        cell.innerText = value;
         cell.setAttribute('title', value);
         this.setLocator();
     }
 
+    // when importing values from csv file
     importCell(x, y, val) {
         this.sheet.updateCell(x, y, val, null);
         let cell = this.sheet.getCell(x, y).cell;
@@ -1135,24 +1068,74 @@ class SheetTable { // data structure to present spreadsheet
         cell.setAttribute('title', val);
     }
 
+    // the actual function that make exports
     downloadCSV() {
         let csv = this.sheet.toCSV();
         createAndDownloadFile('export.csv', csv);
     }
 }
 
-// test only
-// let testFunction = function () {
-//     let sheet = new Sheet(5, 5,);
-//     for (let i = 0; i < 5; i++) {
-//         for (let j = 0; j < 5; j++) {
-//             sheet.board[i][j].getValue() = 'H';
-//         }
-//     }
-//     sheet.addColumn('F');
-//
-//     console.log(sheet.getStrBoard());
-// };
+// when a file is selected, read contents to string and process it
+const handleFile = (file) => {
+    let reader = new FileReader();
+    reader.readAsText(file);
+    reader.onload = (e) => {
+        loadFile(e.target.result);
+    };
+    reader.onerror = (e) => {
+        alert('Something Wrong: ' + e);
+    };
+};
+
+// create file and download
+const createAndDownloadFile = (fileName, content) => {
+    let aTag = document.createElement('a');
+    let blob = new Blob([`\ufeff${content}`], {type: 'text/plain;charset=utf-8'});
+    // let blob = new Blob([content]);
+    aTag.download = fileName;
+    aTag.href = URL.createObjectURL(blob);
+    aTag.click();
+    URL.revokeObjectURL(blob);
+};
+
+// convert csv content string to an array
+const csv2array = (data) => {
+    let matchedVal, delimiter = ',';
+    // regular expression to parse the CSV data
+    const csvPattern = /(,|\r?\n|\r|^)(?:"([^"]*(?:""[^"]*)*)"|([^",\r\n]*))/gi;
+
+    //console.log(csvPattern);
+    // parsed data with default empty first row.
+    let arrData = [[]];
+
+    // Create an array to hold our individual pattern
+    // matching groups.
+    let matches = null;
+
+    // Keep looping over the regular expression matches until we can no longer find a match.
+    while ((matches = csvPattern.exec(data)) != null) {
+        // get the delimiter found
+        let matchedDelimiter = matches[1];
+
+        // Check to see if the given delimiter has a length (is not the start of string) and if it matches
+        // field delimiter. If id does not, then we know that this delimiter is a row delimiter.
+        if (matchedDelimiter.length && (matchedDelimiter !== delimiter)) { // when delimiter === ''
+            // new row
+            arrData.push([]);
+        }
+        // check quoted or unquoted content
+        if (matches[2]) { // quoted
+            matchedVal = matches[2].replace(/""/g, '"');
+        } else { // unquoted
+            matchedVal = matches[3];
+        }
+        // push to last row
+        arrData[arrData.length - 1].push(matchedVal);
+    }
+
+    // return the parsed data.
+    return arrData;
+};
 
 
 // click to switch between showing and hiding
@@ -1168,7 +1151,7 @@ let showMenu = (elementId) => {
     })
 };
 
-// hide when click other places
+// hide menu when click other places
 window.onclick = (e) => {
     const el = e.target;
     if (!el.matches('.drop-btn')) {
@@ -1182,6 +1165,7 @@ window.onclick = (e) => {
     }
 };
 
+// greetings
 const ORA = (num = 24) => {
     const ora =
         '╭━━━┳━━━┳━━━╮╭╮\n' +
@@ -1198,7 +1182,8 @@ const ORA = (num = 24) => {
     return o;
 };
 
-const syncScroll = () => { // sync the horizontal scroll between pinned column bar && table
+// sync the horizontal scroll between pinned column bar && table
+const syncScroll = () => {
     let down = document.querySelector('#sheet-div');
     let up = document.querySelector('#new-col-bar');
     const syncUp = function () {
@@ -1207,7 +1192,7 @@ const syncScroll = () => { // sync the horizontal scroll between pinned column b
     const syncDown = function () {
         up.scrollLeft = down.scrollLeft;
     };
-    //
+    // only preserve one listener to improve scrolling performance
     up.addEventListener('mouseover', function () {
         down.removeEventListener('scroll', syncDown);
         up.addEventListener('scroll', syncUp);
@@ -1220,17 +1205,20 @@ const syncScroll = () => { // sync the horizontal scroll between pinned column b
     down.addEventListener('scroll', syncDown);
 };
 
+// new spreadsheet
 const newSpreadsheet = function (row = 64, col = 27) {
     document.sheetTable = new SheetTable(row, col);
 };
 
-const newFile = () => { // start a new spreadsheet
+// start a new spreadsheet
+const newFile = () => {
     //hideMenu();
     if (confirm("Are you sure to create a new file? This operation would clear all the contents you have changed. ")) {
         newSpreadsheet();
     }
 };
 
+// open a file from csv
 const openFile = () => {
     if (confirm("Are you sure to import? This operation would clear all the contents. ")) {
         let fileBtn = document.getElementById('file-btn');
@@ -1238,6 +1226,7 @@ const openFile = () => {
     }
 };
 
+// load csv content string to an array
 const loadFile = (str) => {
     if (str.length < 1) {
         alert('Something Wrong Happened~');
@@ -1265,6 +1254,7 @@ const loadFile = (str) => {
     tbl.select(1, 'A');
 };
 
+// get shape of array
 const getArrayShape = (array) => {
     let row = array.length;
     let col = -1;
@@ -1277,26 +1267,26 @@ const getArrayShape = (array) => {
 newSpreadsheet();
 syncScroll();
 
-const testFunction2 = () => {
-    class TestCell {
-        constructor(label) {
-            this.label = label;
-        }
-    }
-
-    let cells = [];
-    for (let i = 1; i <= 10; i++) {
-        cells.push(new TestCell('A' + i));
-    }
-
-    const ob = rxjs.Observable.create(function (observer) {
-        cells.forEach((cell) => {
-            observer.next(cell)
-        });
-    });
-
-    ob.subscribe(cell => console.log(cell.label));
-};
+// const testFunction2 = () => {
+//     class TestCell {
+//         constructor(label) {
+//             this.label = label;
+//         }
+//     }
+//
+//     let cells = [];
+//     for (let i = 1; i <= 10; i++) {
+//         cells.push(new TestCell('A' + i));
+//     }
+//
+//     const ob = rxjs.Observable.create(function (observer) {
+//         cells.forEach((cell) => {
+//             observer.next(cell)
+//         });
+//     });
+//
+//     ob.subscribe(cell => console.log(cell.label));
+// };
 
 
 
