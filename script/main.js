@@ -1,6 +1,7 @@
 // const rxjs = require('rxjs');
 const from = rxjs.from;
 let listenersAdded = false;
+// add insert & remove method to arrays
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
         this.splice(index, 0, item);
@@ -79,6 +80,7 @@ class RefTree {
         return flag;
     }
 
+    // update function from the most bottom to up (DFS)
     updateValFormulas() {
         // dfs, update from the bottom
         this._rxjsUpdateValFormulas();
@@ -183,19 +185,22 @@ class SheetCell {
         return res;
     }
 
+    // set cell's label
     setLabel(x, y) {
         this.label = y + x;
     }
 
+    // get cell's value
     getValue() {
         return this.val;
     }
 
+    // set cell's value
     setValue(val) {
-        if (val === '' || val.length === 0 || isNaN(val)) {
+        if (val === '' || val.length === 0 || isNaN(val)) { // string
             this.isNum = false;
             this.val = val;
-        } else {
+        } else { // number
             this.isNum = true;
             this.val = Number(val);
         }
@@ -203,6 +208,8 @@ class SheetCell {
         this.cell.setAttribute('title', this.val);
     }
 
+    // input [cell1, cell2]
+    // do sum of cell1:cell2
     calcSumPair(pair) {
         const sheet = document.sheetTable.sheet;
         return sheet.calcSum(sheet.expandSumReference(
@@ -213,9 +220,9 @@ class SheetCell {
 
     refreshFormula(map) { // AUTOMATICALLY refresh formula
         if (this.formula !== null) {
-
             let res = this.formulaR;
-            let flag = false;
+            let flag = false; // if the cell is deleted
+            // refresh sum reference
             if (this.sumReferences.length > 0) {
                 this.sumReferences.forEach((pair) => {
                     if (map.has(pair[0].uuid)
@@ -229,6 +236,7 @@ class SheetCell {
                     }
                 });
             }
+            // refresh general reference
             this.references.forEach((cell) => {
                 if (map.has(cell.uuid)) {
                     res = res.replace('{-R-}', cell.label);
@@ -248,13 +256,13 @@ class SheetCell {
     refreshValue() { // AUTOMATICALLY refresh value
         try {
             let modifiedFormula = this.formulaR.substring(1);
-            if (this.sumReferences.length > 0) {
+            if (this.sumReferences.length > 0) { // refresh sum
                 this.sumReferences.forEach((pair) => {
                     modifiedFormula = modifiedFormula.replace('{-S-}',
                         '' + this.calcSumPair(pair));
                 });
             }
-            this.references.forEach((cell) => {
+            this.references.forEach((cell) => { // refresh general
                 modifiedFormula = modifiedFormula.replace('{-R-}',
                     cell.getValue());
             });
@@ -413,6 +421,8 @@ class Sheet { // spreadsheet data structure
         return [cells, modified];
     }
 
+    // get SUM part of formula and return
+    // parsed formula and references
     parseSumFunction(thisCell, formula) {
         let str = formula.substring(0);
         let sumRefs = [];
@@ -429,6 +439,7 @@ class Sheet { // spreadsheet data structure
         return [sumRefs, str];
     }
 
+    // process string 'A1:A2' and return [cell1, cell2]
     processSumArg(arg) {
         let sumRef = [];
         const labelEx = /^[A-Z]+[1-9][0-9]*$/;
@@ -491,14 +502,14 @@ class Sheet { // spreadsheet data structure
                 modifiedFormula = res[1];
                 let newVal = null;
 
-                refs.concat(expRefs).forEach(cell => {
+                refs.concat(expRefs).forEach(cell => { // simply check references & values
                     if (cell.label === thisCell.label) {
                         throw new Error('There is one or more circular reference.');
                     } else if (cell.getValue().length < 1 || !cell.isNum) {
                         throw new Error('Invalid number value at ' + cell.label);
                     }
                 });
-
+                // replace modified strings to values
                 sumRefs.forEach(pair => {
                     modifiedFormula = modifiedFormula.replace("{-S-}",
                         '' + this.calcSum(this.expandSumReference(
@@ -511,12 +522,13 @@ class Sheet { // spreadsheet data structure
                     modifiedFormula = modifiedFormula.replace('{-R-}',
                         cell.getValue());
                 });
-
+                // check circular reference
                 if (!this.refTree.tryReference(thisCell,
                     refs.concat(expRefs))) {
                     throw new Error('There is one or more circular reference.');
                 }
                 console.log(modifiedFormula);
+                // calculate
                 const calcVal = new Function('return ' + modifiedFormula + ';');
                 newVal = calcVal();
                 if (newVal != null) {
@@ -542,6 +554,8 @@ class Sheet { // spreadsheet data structure
         this.refTree.updateValFormulas();
     }
 
+    // input [[cellA1, cellA8], ..., [cellB1, cellB8]] and
+    // return [ cellA1, cellA2, ..., cellB7, cellB8 ]
     expandAllColonReference(sumRefs) {
         let cells = [];
         sumRefs.forEach((pair) => {
@@ -553,6 +567,7 @@ class Sheet { // spreadsheet data structure
         return cells;
     }
 
+    // directly calculate all cells' sum in an array
     calcSum(cells) {
         let sum = 0;
         cells.forEach(cell => {
@@ -565,7 +580,7 @@ class Sheet { // spreadsheet data structure
         return sum;
     }
 
-
+    // input label1 & label2 and return all cells that bound in the 2 labels
     expandSumReference(label1, label2) {
         let labels = [];
         const convert = this.board[0][0].convertLabel;
@@ -588,6 +603,7 @@ class Sheet { // spreadsheet data structure
         return this.convertSumReference(labels);
     }
 
+    // return cells queried by an array of labels
     convertSumReference(labels) {
         let cells = [];
         labels.forEach((lbl) => {
