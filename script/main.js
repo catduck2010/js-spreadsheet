@@ -1,5 +1,5 @@
 // const rxjs = require('rxjs');
-const from = rxjs.from;
+const [from, filter, concat] = [rxjs.from, rxjs.operators.filter, rxjs.operators.concat];
 let listenersAdded = false;
 // add insert & remove method to arrays
 Array.prototype.insert = function (index, item) {
@@ -45,38 +45,48 @@ class RefTree {
         let old = this.graph.get(node);
         // if has loop, return false
         this.setReferences(node, newRefs);
-        let res = !this.hasLoop();
+        let res = this.hasLoop();
         this.setReferences(node, old);
-        return res;
+        if (res) { // has loop
+            throw new Error('There is one or more circular reference.')
+        }
     }
 
     hasLoop() {
         // try to find out if there is
         // a loop in a DAG (Directed Acyclic Graph)
+        if (this.graph.size === 0) {
+            return false;
+        }
         let visited = new Map();
         // key: node, val: visiting(1)/visited(-1)
         let flag = false;
-        let arrows = [];
+        //let arrows = [];
+        const setVisit = (node, code) => {
+            visited.set(node, code)
+        };
+
         const dfs = (node) => {
             if (!flag && visited.has(node) && visited.get(node) === 1) {// pointing to a visiting node
                 flag = true;// a loop
             } else if (!flag && !visited.has(node)) {//not visited
-                visited.set(node, 1);// visiting
+                setVisit(node, 1);// visiting
                 let cells = this.graph.get(node);
                 if (cells !== undefined && cells != null && cells.length > 0) {
                     cells.forEach((cell) => {
                         // for testing
-                        arrows.push(node.label + " --> " + cell.label);
+                        //arrows.push(node.label + " --> " + cell.label);
                         dfs(cell);
                     });
                 }
-                visited.set(node, -1);// visited
+                setVisit(node, -1);// visited
             }
         };
         for (let node of this.graph.keys()) {
             dfs(node);
+            //newDFS(node);
         }
-        console.log(arrows);
+        //console.log(arrows);
         return flag;
     }
 
@@ -84,34 +94,7 @@ class RefTree {
     updateValFormulas() {
         // dfs, update from the bottom
         this._rxjsUpdateValFormulas();
-        // let arrows = [];
-        // let visited = new Map();
-        // const dfs = (node) => {
-        //     if (!visited.has(node)) { // not visited
-        //         visited.set(node, 1); // visiting
-        //         let cells = this.graph.get(node);
-        //         if (cells !== undefined && cells != null && cells.length > 0) {
-        //             cells.forEach((cell) => {
-        //                 // for testing
-        //                 arrows.push(node.label + " --> " + cell.label);
-        //                 dfs(cell);
-        //             });
-        //         }
-        //         node.refreshFormula(this.cellMap);
-        //         console.log('Refreshed ' + node.label);
-        //         visited.set(node, -1);// visited
-        //     }
-        // };
-        // for (let node of this.graph.keys()) {
-        //     dfs(node);
-        // }
-        // console.log(arrows);
-    }
-
-    _rxjsUpdateValFormulas() {
-        // refactored version
-        let arrows = [];
-        let values = [];
+        /*let arrows = [];
         let visited = new Map();
         const dfs = (node) => {
             if (!visited.has(node)) { // not visited
@@ -124,7 +107,34 @@ class RefTree {
                         dfs(cell);
                     });
                 }
-                values.push(node);
+                node.refreshFormula(this.cellMap);
+                console.log('Refreshed ' + node.label);
+                visited.set(node, -1);// visited
+            }
+        };
+        for (let node of this.graph.keys()) {
+            dfs(node);
+        }
+        console.log(arrows);*/
+    }
+
+    _rxjsUpdateValFormulas() {
+        // refactored version
+        let arrows = [];
+        let orders = [];
+        let visited = new Map();
+        const dfs = (node) => {
+            if (!visited.has(node)) { // not visited
+                visited.set(node, 1); // visiting
+                let cells = this.graph.get(node);
+                if (cells !== undefined && cells != null && cells.length > 0) {
+                    cells.forEach((cell) => {
+                        // for testing
+                        arrows.push(node.label + " -> " + cell.label);
+                        dfs(cell);
+                    });
+                }
+                orders.push(node);
                 //node.refreshFormula(this.cellMap);
                 //console.log('Refreshed ' + node.label);
                 visited.set(node, -1);// visited
@@ -134,19 +144,21 @@ class RefTree {
             dfs(node);
         }
 
-        // const cellIterator = rxjs.Observable.create(function (observer) {
-        //     values.forEach((cell) => {
-        //         observer.next(cell);
-        //     });
-        // });
+        const cellIterator = from(orders);
 
-        const cellIterator = from(values);
+        let refreshed = [];
+        cellIterator // only refresh those cells
+            .pipe(filter(obj => obj instanceof SheetCell)) // who has to be a cell
+            .pipe(filter(cell => cell.formulaR != null)) // and who has a formula
+            .subscribe(cell => {
+                cell.refreshFormula(this.cellMap);
+                refreshed.push(cell);
+            });
 
-        cellIterator.subscribe(cell => {
-            cell.refreshFormula(this.cellMap);
-        });
-        //console.log('Refresh Order: ' + values);
-        console.log(arrows);
+        if (this.graph.size !== 0) {
+            console.log('Reference Graph: ' + arrows.join(', '));
+            console.log('Refresh Order: ' + refreshed.join(','));
+        }
     }
 
 }
@@ -273,9 +285,11 @@ class SheetCell {
             this.setValue('#REF!');
         }
     }
-
-
 }
+
+SheetCell.prototype.toString = function () {
+    return this.label;
+};
 
 class Sheet { // spreadsheet data structure
     constructor(rows, cols) { // create sheet
@@ -485,21 +499,20 @@ class Sheet { // spreadsheet data structure
     }
 
     updateCell(x, y, val, formula = null) { // update cell's content
-        let thisCell = this.getCell(x, y);
+        this._rxjsUpdateCell(x, y, val, formula);
+        /*let thisCell = this.getCell(x, y);
         if (formula != null) { // the cell has formula
             try {
                 let modifiedFormula = formula.substring(0);
-                let sumRefs = [];
+                let refs, sumRefs = [], expRefs = [];
                 if (formula.indexOf('SUM') !== -1) { // the cell has sum function
-                    let result = this.parseSumFunction(thisCell, modifiedFormula);
-                    sumRefs = result[0];
-                    modifiedFormula = result[1];
+                    [sumRefs, modifiedFormula] = this.parseSumFunction(thisCell, modifiedFormula);
+                    expRefs = this.expandAllColonReference(sumRefs);
                 }
-                console.log(modifiedFormula);
-                let expRefs = this.expandAllColonReference(sumRefs);
-                let res = this.getCellReference(thisCell, modifiedFormula);// = removed
-                const refs = res[0];
-                modifiedFormula = res[1];
+                //console.log(modifiedFormula);
+                [refs, modifiedFormula] = this.getCellReference(thisCell, modifiedFormula);
+
+                const formulaR = modifiedFormula.substring(0); // this formula is without '='
                 let newVal = null;
 
                 refs.concat(expRefs).forEach(cell => { // simply check references & values
@@ -509,7 +522,11 @@ class Sheet { // spreadsheet data structure
                         throw new Error('Invalid number value at ' + cell.label);
                     }
                 });
-                // replace modified strings to values
+
+                // check circular reference
+                this.refTree.tryReference(thisCell, refs.concat(expRefs));
+
+                // replace modified strings to (calculated) values
                 sumRefs.forEach(pair => {
                     modifiedFormula = modifiedFormula.replace("{-S-}",
                         '' + this.calcSum(this.expandSumReference(
@@ -517,16 +534,11 @@ class Sheet { // spreadsheet data structure
                         pair[1].label
                         )));
                 });
-
                 refs.forEach(cell => {
                     modifiedFormula = modifiedFormula.replace('{-R-}',
                         cell.getValue());
                 });
-                // check circular reference
-                if (!this.refTree.tryReference(thisCell,
-                    refs.concat(expRefs))) {
-                    throw new Error('There is one or more circular reference.');
-                }
+
                 console.log(modifiedFormula);
                 // calculate
                 const calcVal = new Function('return ' + modifiedFormula + ';');
@@ -534,7 +546,94 @@ class Sheet { // spreadsheet data structure
                 if (newVal != null) {
                     thisCell.setValue(newVal);
                     thisCell.formula = formula;
-                    thisCell.formulaR = '=' + res[1];
+                    thisCell.formulaR = '=' + formulaR;
+                    thisCell.references = refs;
+                    thisCell.sumReferences = sumRefs;
+                    this.refTree.setReferences(thisCell,
+                        thisCell.references.concat(expRefs));
+                }
+            } catch (e) {
+                alert(e);
+            }
+        } else { // the cell has no formula
+            thisCell.setValue(val);
+            thisCell.formula = null;
+            thisCell.formulaR = null;
+            thisCell.sumReferences = [];
+            thisCell.references = [];
+            this.refTree.setReferences(thisCell, []);
+        }
+        this.refTree.updateValFormulas();*/
+    }
+
+    _rxjsUpdateCell(x, y, val, formula) {
+        let thisCell = this.getCell(x, y);
+        if (formula != null) { // the cell has formula
+            try {
+                let modifiedFormula = formula.substring(0);
+                let refs, sumRefs = [], expRefs = [];
+                if (formula.indexOf('SUM') !== -1) { // the cell has sum function
+                    [sumRefs, modifiedFormula] = this.parseSumFunction(thisCell, modifiedFormula);
+                    expRefs = this.expandAllColonReference(sumRefs);
+                }
+                //console.log(modifiedFormula);
+                [refs, modifiedFormula] = this.getCellReference(thisCell, modifiedFormula);
+
+                const formulaR = modifiedFormula.substring(0); // this formula is without '='
+                let newVal = null;
+
+                // Observables
+                const sumReferencePairObservable = from(sumRefs);
+                const referenceObservable = from(refs);
+                const expandedReferenceObservable = from(expRefs);
+
+                // simply check references & values
+                referenceObservable
+                    .pipe(concat(expandedReferenceObservable))
+                    .pipe(filter(obj => obj instanceof SheetCell))
+                    .subscribe(cell => {
+                        if (cell.label === thisCell.label) {
+                            throw new Error('There is one or more circular reference.');
+                        } else if (cell.getValue().length < 1 || !cell.isNum) {
+                            throw new Error('Invalid number value at ' + cell.label);
+                        }
+                    });
+
+                // check circular reference
+                this.refTree.tryReference(thisCell, refs.concat(expRefs));
+
+                // replace modified strings to (calculated) values
+
+                sumReferencePairObservable
+                    .pipe(concat(referenceObservable))
+                    .subscribe(obj => {
+                        if (obj instanceof SheetCell) { // A cell
+                            modifiedFormula = modifiedFormula.replace('{-R-}',
+                                '' + obj.getValue());
+                        } else if (obj instanceof Array) { // An array
+                            let pair = obj;
+                            if (pair.length !== 2) {
+                                throw new Error('Something Wrong when replacing references!');
+                            } else {
+                                modifiedFormula = modifiedFormula.replace("{-S-}",
+                                    '' + this.calcSum(this.expandSumReference(
+                                    pair[0].label,
+                                    pair[1].label
+                                    )));
+                            }
+                        } else {
+                            throw new Error('Something Wrong when replacing references!');
+                        }
+                    });
+
+                // console.log(modifiedFormula);
+                // calculate
+                const calcVal = new Function('return ' + modifiedFormula + ';');
+                newVal = calcVal();
+                if (newVal != null) {
+                    thisCell.setValue(newVal);
+                    thisCell.formula = formula;
+                    thisCell.formulaR = '=' + formulaR;
                     thisCell.references = refs;
                     thisCell.sumReferences = sumRefs;
                     this.refTree.setReferences(thisCell,
