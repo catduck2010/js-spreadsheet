@@ -71,3 +71,6 @@
 > 
 > https://www.learnrxjs.io/
 
+<div align="center">
+	<img src="pics/kono-dio-da.jpg" />
+</div>
