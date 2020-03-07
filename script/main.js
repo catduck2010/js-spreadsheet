@@ -466,6 +466,11 @@ class Sheet { // spreadsheet data structure
         this.refTree.updateValFormulas();
     }
 
+    checkLabel(label) {
+        let [row, col] = Sheet.convertLabel(label);
+        return !(row >= this.rowNum || Sheet.letter2index(col) >= this.colNum);// false: out of bound
+    }
+
     getCellReference(cell, formula) {
         let str = formula.substring(1);
         let modified = str.substring(0);
@@ -475,6 +480,9 @@ class Sheet { // spreadsheet data structure
         let matchRes = null;
         while ((matchRes = regEx.exec(str)) != null) {
             let label = matchRes[2];
+            if (!this.checkLabel(label)) {
+                throw new Error('Cell ' + label + ' is out of bound!');
+            }
             modified = modified.replace(label, '{-R-}');
             cells.push(this.getCellByLabel(label));
         }
@@ -508,6 +516,12 @@ class Sheet { // spreadsheet data structure
             let as = arg.split(':');
             if (as.length !== 2 || !labelEx.test(as[0]) || !labelEx.test(as[1])) {
                 throw new Error('Wrong Reference!');
+            }
+            if (!this.checkLabel(as[0])) {
+                throw new Error('Cell ' + as[0] + ' is out of bound!');
+            }
+            if (!this.checkLabel(as[1])) {
+                throw new Error('Cell ' + as[1] + ' is out of bound!');
             }
             sumRef = [this.getCellByLabel(as[0]), this.getCellByLabel(as[1])];
         }
@@ -627,28 +641,24 @@ class Sheet { // spreadsheet data structure
 
                 const formulaR = modifiedFormula.substring(0); // this formula is without '='
 
-                // Observables
-                const sumReferencePairObservable = from(sumRefs);
-                const referenceObservable = from(refs);
-                const expandedReferenceObservable = from(expRefs);
-
                 // simply check references & values
-                referenceObservable
-                    .pipe(concat(expandedReferenceObservable))
-                    .pipe(filter(obj => obj instanceof SheetCell))
-                    .subscribe(cell => {
-                        if (cell.label === thisCell.label) {
-                            throw new Error('There is one or more circular reference.');
-                        } else if (cell.getValue().length < 1 || !cell.isNum) {
-                            throw new Error('Invalid number value at ' + cell.label);
-                        }
-                    });
+                refs.concat(expRefs).forEach(cell => {
+                    if (cell.label === thisCell.label) {
+                        throw new Error('There is one or more circular reference.');
+                    }
+                    if (!cell.isNum || cell.getValue().length < 1) {
+                        throw new Error('Invalid number value at ' + cell.label);
+                    }
+                });
 
                 // check circular reference
                 this.refTree.tryReference(thisCell, refs.concat(expRefs));
 
-                // replace modified strings to (calculated) values
+                // Observables
+                const sumReferencePairObservable = from(sumRefs);
+                const referenceObservable = from(refs);
 
+                // replace modified strings to (calculated) values
                 sumReferencePairObservable
                     .pipe(concat(referenceObservable))
                     .subscribe(obj => {
@@ -671,7 +681,7 @@ class Sheet { // spreadsheet data structure
                         }
                     });
 
-                // console.log(modifiedFormula);
+                console.log(modifiedFormula);
                 // calculate
                 const calcVal = new Function('return ' + modifiedFormula + ';');
                 let newVal = calcVal();
