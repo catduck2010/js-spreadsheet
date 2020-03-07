@@ -1,6 +1,5 @@
 // const rxjs = require('rxjs');
 const [from, filter, concat] = [rxjs.from, rxjs.operators.filter, rxjs.operators.concat];
-let listenersAdded = false;
 // add insert & remove method to arrays
 Array.prototype.insert = function (index, item) {
     if (index > -1 && index <= this.length) {
@@ -61,7 +60,7 @@ class RefTree {
         let visited = new Map();
         // key: node, val: visiting(1)/visited(-1)
         let flag = false;
-        //let arrows = [];
+        // let arrows = [];
         const setVisit = (node, code) => {
             visited.set(node, code)
         };
@@ -69,13 +68,13 @@ class RefTree {
         const dfs = (node) => {
             if (!flag && visited.has(node) && visited.get(node) === 1) {// pointing to a visiting node
                 flag = true;// a loop
-            } else if (!flag && !visited.has(node)) {//not visited
-                setVisit(node, 1);// visiting
+            } else if (!flag && !visited.has(node)) { //not visited
+                setVisit(node, 1); // visiting
                 let cells = this.graph.get(node);
                 if (cells !== undefined && cells != null && cells.length > 0) {
                     cells.forEach((cell) => {
                         // for testing
-                        //arrows.push(node.label + " --> " + cell.label);
+                        // arrows.push(node.label + " --> " + cell.label);
                         dfs(cell);
                     });
                 }
@@ -84,16 +83,15 @@ class RefTree {
         };
         for (let node of this.graph.keys()) {
             dfs(node);
-            //newDFS(node);
         }
-        //console.log(arrows);
+        // console.log(arrows);
         return flag;
     }
 
     // update function from the most bottom to up (DFS)
     updateValFormulas() {
         // dfs, update from the bottom
-        this._rxjsUpdateValFormulas();
+        this.#rxjsUpdateValFormulas();
         /*let arrows = [];
         let visited = new Map();
         const dfs = (node) => {
@@ -118,7 +116,7 @@ class RefTree {
         console.log(arrows);*/
     }
 
-    _rxjsUpdateValFormulas() {
+    #rxjsUpdateValFormulas = () => {
         // refactored version
         let arrows = [];
         let orders = [];
@@ -144,15 +142,15 @@ class RefTree {
             dfs(node);
         }
 
-        const cellIterator = from(orders);
+        const cellObservable = from(orders);
 
         let refreshed = [];
-        cellIterator // only refresh those cells
+        cellObservable // only refresh those cells
             .pipe(filter(obj => obj instanceof SheetCell)) // who has to be a cell
             .pipe(filter(cell => cell.formulaR != null)) // and who has a formula
             .subscribe(cell => {
                 cell.refreshFormula(this.cellMap);
-                refreshed.push(cell);
+                refreshed.push(cell.getLabel());
             });
 
         if (this.graph.size !== 0) {
@@ -165,11 +163,17 @@ class RefTree {
 
 // data structure for a cell in Class Sheet
 class SheetCell {
+    // private fields
+    #val;
+    #uuid;
+
     constructor() {
-        this.uuid = Math.uuid();
+        // public
+        this.#uuid = Math.uuid();
         this.label = '';
+        // private
         this.isNum = false;
-        this.val = ''; //stores value
+        this.#val = ''; //stores value
         this.references = [];
         this.sumReferences = [];
         // =SUM(A1:A2)+SUM(B1:B5)
@@ -179,22 +183,12 @@ class SheetCell {
         this.formulaR = null; // stores ACTUAL formula
     }
 
-    convertLabel(label) { // convert 'A1' to [1,'A']
-        const regEx = /^[A-Z]+[1-9][0-9]*$/;
-        let res = [];
-        if (regEx.test(label)) {
-            let start = 0;
-            while (!(label.charCodeAt(start) <= '9'.charCodeAt(0)
-                && label.charCodeAt(start) >= '0'.charCodeAt(0))
-            && start < label.length) {
-                start++;
-            }
+    getUUID() {
+        return this.#uuid;
+    }
 
-            let x = label.substring(start);
-            let y = label.substring(0, start);
-            res = [x, y];
-        }
-        return res;
+    getLabel() {
+        return this.label;
     }
 
     // set cell's label
@@ -204,20 +198,20 @@ class SheetCell {
 
     // get cell's value
     getValue() {
-        return this.val;
+        return this.#val;
     }
 
     // set cell's value
     setValue(val) {
         if (val === '' || val.length === 0 || isNaN(val)) { // string
             this.isNum = false;
-            this.val = val;
+            this.#val = val;
         } else { // number
             this.isNum = true;
-            this.val = Number(val);
+            this.#val = Number(val);
         }
-        this.cell.innerText = this.val + '';
-        this.cell.setAttribute('title', this.val);
+        this.cell.innerText = this.#val + '';
+        this.cell.setAttribute('title', this.#val);
     }
 
     // input [cell1, cell2]
@@ -237,8 +231,8 @@ class SheetCell {
             // refresh sum reference
             if (this.sumReferences.length > 0) {
                 this.sumReferences.forEach((pair) => {
-                    if (map.has(pair[0].uuid)
-                        && map.has(pair[1].uuid)) {
+                    if (map.has(pair[0].getUUID())
+                        && map.has(pair[1].getUUID())) {
                         res = res.replace(
                             '({-S-})',
                             'SUM(' + pair[0].label + ':' + pair[1].label + ')');
@@ -250,7 +244,7 @@ class SheetCell {
             }
             // refresh general reference
             this.references.forEach((cell) => {
-                if (map.has(cell.uuid)) {
+                if (map.has(cell.getUUID())) {
                     res = res.replace('{-R-}', cell.label);
                 } else {
                     flag = true;
@@ -287,10 +281,6 @@ class SheetCell {
     }
 }
 
-SheetCell.prototype.toString = function () {
-    return this.label;
-};
-
 class Sheet { // spreadsheet data structure
     constructor(rows, cols) { // create sheet
         this.board = [];
@@ -304,16 +294,16 @@ class Sheet { // spreadsheet data structure
             let temp = [];
             for (let j = 0; j < cols; j++) {
                 let cell = new SheetCell();
-                cell.setLabel(i + 1, this.index2letter(j));
+                cell.setLabel(i + 1, Sheet.index2letter(j));
                 temp.push(cell);
-                this.cellMap.set(cell.uuid, cell);
+                this.cellMap.set(cell.getUUID(), cell);
             }
             this.board.push(temp);
         }
     }
 
     // convert 'A' to 0, ..., 'AA' to 26, etc.
-    letter2index(letter) {
+    static letter2index = (letter) => {
         let str = letter.toUpperCase();
         let num = 0, increase = 0;
         for (let i = str.length - 1; i >= 0; i--) {
@@ -322,10 +312,10 @@ class Sheet { // spreadsheet data structure
         }
         //console.log(num);
         return num;
-    }
+    };
 
     // convert 0 to 'A', ..., 26 to 'AA', etc.
-    index2letter(n) {
+    static index2letter = (n) => {
         const ordA = 'A'.charCodeAt(0);
         const ordZ = 'Z'.charCodeAt(0);
         const len = ordZ - ordA + 1;
@@ -335,11 +325,30 @@ class Sheet { // spreadsheet data structure
             n = Math.floor(n / len) - 1;
         }
         return s;
-    }
+    };
+
+    // convert 'A1' to [1,'A']
+    static convertLabel = (label) => {
+        const regEx = /^[A-Z]+[1-9][0-9]*$/;
+        let res = [];
+        if (regEx.test(label)) {
+            let start = 0;
+            while (!(label.charCodeAt(start) <= '9'.charCodeAt(0)
+                && label.charCodeAt(start) >= '0'.charCodeAt(0))
+            && start < label.length) {
+                start++;
+            }
+
+            let x = label.substring(start);
+            let y = label.substring(0, start);
+            res = [x, y];
+        }
+        return res;
+    };
 
     // convert sheet data to string (for export)
     toCSV() {
-        let rows = this.getStrBoard();
+        let rows = this.#getStrBoard();
         return rows.map(e => e.join(",")).join("\n");
     }
 
@@ -347,9 +356,9 @@ class Sheet { // spreadsheet data structure
         let temp = [];
         for (let i = 0; i < this.colNum; i++) {
             let cell = new SheetCell();
-            cell.setLabel(at + 1, this.index2letter(i));
+            cell.setLabel(at + 1, Sheet.index2letter(i));
             temp.push(cell);
-            this.cellMap.set(cell.uuid, cell);
+            this.cellMap.set(cell.getUUID(), cell);
         }
         this.board.insert(at, temp);
         this.rowNum++;
@@ -357,30 +366,30 @@ class Sheet { // spreadsheet data structure
     }
 
     addColumn(at) {//at as before, at+1 as after
-        at = this.letter2index(at);
-        this.addColumnWithNum(at);
+        at = Sheet.letter2index(at);
+        this.#addColumnWithNum(at);
     }
 
     addColumnAfter(at) {
-        at = this.letter2index(at);
-        this.addColumnWithNum(at + 1);
+        at = Sheet.letter2index(at);
+        this.#addColumnWithNum(at + 1);
     }
 
-    addColumnWithNum(at) {
+    #addColumnWithNum = (at) => {
         for (let i = 0; i < this.rowNum; i++) {
             let row = this.board[i];
             let cell = new SheetCell();
-            cell.setLabel(i + 1, this.index2letter(at));
+            cell.setLabel(i + 1, Sheet.index2letter(at));
             row.insert(at, cell);
-            this.cellMap.set(cell.uuid, cell);
+            this.cellMap.set(cell.getUUID(), cell);
         }
         this.colNum++;
         this.updateLabel(0, at + 1);
-    }
+    };
 
     delRow(at) {
         this.board[at].forEach((cell) => {
-            this.cellMap.delete(cell.uuid)
+            this.cellMap.delete(cell.getUUID())
         });
         this.board.remove(at);
         this.rowNum--;
@@ -388,33 +397,28 @@ class Sheet { // spreadsheet data structure
     }
 
     delColumn(at) {
-        at = this.letter2index(at);
-        this.delColumnWithNum(at);
+        at = Sheet.letter2index(at);
+        this.#delColumnWithNum(at);
     }
 
-    delColumnWithNum(at) {
+    #delColumnWithNum = (at) => {
         this.board.forEach((row) => {
-            this.cellMap.delete(row[at].uuid);
+            this.cellMap.delete(row[at].getUUID());
             row.remove(at);
         });
         this.colNum--;
         this.updateLabel(0, at);
-    }
-
-    getCellByID(id) {
-        return this.cellMap.get(id);
-    }
+    };
 
     getCellByLabel(label) {
-        const fx = this.board[0][0].convertLabel;
-        const res = fx(label);
+        const res = Sheet.convertLabel(label);
         return this.getCell(res[0], res[1]);
     }
 
     updateLabel(startRow = 0, startCol = 0) {
         for (let i = startRow; i < this.rowNum; i++) {
             for (let j = startCol; j < this.colNum; j++) {
-                this.board[i][j].setLabel(i + 1, this.index2letter(j));
+                this.board[i][j].setLabel(i + 1, Sheet.index2letter(j));
             }
         }
         this.refTree.updateValFormulas();
@@ -470,12 +474,12 @@ class Sheet { // spreadsheet data structure
 
     getCell(row, col) { // get cell with spreadsheet index such as 'A1'
         let x = row - 1; // start from 1
-        let y = this.letter2index(col);
+        let y = Sheet.letter2index(col);
 
         return this.board[x][y];
     }
 
-    getStrBoard() {
+    #getStrBoard = () => {
         let res = [];
         this.board.forEach((row) => {
             let temp = [];
@@ -496,10 +500,10 @@ class Sheet { // spreadsheet data structure
             res.push(temp);
         });
         return res;
-    }
+    };
 
     updateCell(x, y, val, formula = null) { // update cell's content
-        this._rxjsUpdateCell(x, y, val, formula);
+        this.#rxjsUpdateCell(x, y, val, formula);
         /*let thisCell = this.getCell(x, y);
         if (formula != null) { // the cell has formula
             try {
@@ -566,7 +570,7 @@ class Sheet { // spreadsheet data structure
         this.refTree.updateValFormulas();*/
     }
 
-    _rxjsUpdateCell(x, y, val, formula) {
+    #rxjsUpdateCell = (x, y, val, formula) => {
         let thisCell = this.getCell(x, y);
         if (formula != null) { // the cell has formula
             try {
@@ -574,13 +578,12 @@ class Sheet { // spreadsheet data structure
                 let refs, sumRefs = [], expRefs = [];
                 if (formula.indexOf('SUM') !== -1) { // the cell has sum function
                     [sumRefs, modifiedFormula] = this.parseSumFunction(thisCell, modifiedFormula);
-                    expRefs = this.expandAllColonReference(sumRefs);
+                    expRefs = this.#expandAllColonReference(sumRefs);
                 }
                 //console.log(modifiedFormula);
                 [refs, modifiedFormula] = this.getCellReference(thisCell, modifiedFormula);
 
                 const formulaR = modifiedFormula.substring(0); // this formula is without '='
-                let newVal = null;
 
                 // Observables
                 const sumReferencePairObservable = from(sumRefs);
@@ -629,7 +632,7 @@ class Sheet { // spreadsheet data structure
                 // console.log(modifiedFormula);
                 // calculate
                 const calcVal = new Function('return ' + modifiedFormula + ';');
-                newVal = calcVal();
+                let newVal = calcVal();
                 if (newVal != null) {
                     thisCell.setValue(newVal);
                     thisCell.formula = formula;
@@ -651,11 +654,11 @@ class Sheet { // spreadsheet data structure
             this.refTree.setReferences(thisCell, []);
         }
         this.refTree.updateValFormulas();
-    }
+    };
 
     // input [[cellA1, cellA8], ..., [cellB1, cellB8]] and
     // return [ cellA1, cellA2, ..., cellB7, cellB8 ]
-    expandAllColonReference(sumRefs) {
+    #expandAllColonReference = (sumRefs) => {
         let cells = [];
         sumRefs.forEach((pair) => {
             let refs = this.expandSumReference(pair[0].label, pair[1].label);
@@ -664,7 +667,7 @@ class Sheet { // spreadsheet data structure
             });
         });
         return cells;
-    }
+    };
 
     // directly calculate all cells' sum in an array
     calcSum(cells) {
@@ -682,9 +685,8 @@ class Sheet { // spreadsheet data structure
     // input label1 & label2 and return all cells that bound in the 2 labels
     expandSumReference(label1, label2) {
         let labels = [];
-        const convert = this.board[0][0].convertLabel;
-        let index1 = convert(label1);
-        let index2 = convert(label2);
+        let index1 = Sheet.convertLabel(label1);
+        let index2 = Sheet.convertLabel(label2);
         for (let i = 0; i < 2; i++) { // index1 < index2
             if (index1[i] > index2[i]) {
                 const temp = index1[i];
@@ -693,10 +695,10 @@ class Sheet { // spreadsheet data structure
             }
         }
         for (let i = index1[0]; i <= index2[0]; i++) {
-            for (let j = this.letter2index(index1[1]);
-                 j <= this.letter2index(index2[1]);
+            for (let j = Sheet.letter2index(index1[1]);
+                 j <= Sheet.letter2index(index2[1]);
                  j++) {
-                labels.push(this.index2letter(j) + i);
+                labels.push(Sheet.index2letter(j) + i);
             }
         }
         return this.convertSumReference(labels);
@@ -713,7 +715,7 @@ class Sheet { // spreadsheet data structure
 }
 
 class SheetTable { // data structure to present spreadsheet
-    constructor(row, col) {
+    constructor(row, col, addListeners = false) {
         //x,y,flag indicates current selection
         this.x = 1;
         this.y = 'A';
@@ -733,49 +735,49 @@ class SheetTable { // data structure to present spreadsheet
         this.table = document.getElementById('sheet-table');
         this.rowBtns = null;
         this.colBtns = null;
-        this.tableCells = null;
+        // this.tableCells = null;
 
         this.writeTable();
-        this.addListeners();
-    }
-
-    addListeners() { // add listeners to input & button elements
-        if (!listenersAdded) { // ensure to be used ONLY ONCE
-            // locator's listener
-            this.locator.addEventListener("keyup", function (event) {
-                if (event.key === "Enter") { // press Enter or return
-                    //console.log('Pressed');
-                    document.sheetTable.locate();
-                    this.blur();
-                } else if (event.key === "Escape") {
-                    document.sheetTable.setLocator();
-                    this.blur();
-                }
-            });
-            // textedit's listener
-            this.textedit.addEventListener("keyup", function (event) {
-                if (event.key === "Enter") {
-                    document.sheetTable.editCell();
-                    this.blur();
-                    //sheetTable.selectNext();
-                } else if (event.key === "Escape") {
-                    document.sheetTable.setLocator();
-                    this.blur();
-                    document.sheetTable.disableButtons();
-                }
-            });
-            this.textedit.addEventListener("input", function () {
-                document.sheetTable.syncTextEdit();
-            });
-            this.textedit.addEventListener("focusin", function () {
-                document.sheetTable.enableButton(document.sheetTable.checkBtn);
-                document.sheetTable.enableButton(document.sheetTable.crossBtn);
-                document.sheetTable.enableButton(document.sheetTable.fxBtn);
-                document.sheetTable.syncTextEdit();
-            });
-            listenersAdded = true;
+        if (addListeners) {
+            this.#addListeners();
         }
     }
+
+    #addListeners = () => { // add listeners to input & button elements
+        // locator's listener
+        this.locator.addEventListener("keyup", function (event) {
+            if (event.key === "Enter") { // press Enter or return
+                //console.log('Pressed');
+                document.sheetTable.locate();
+                this.blur();
+            } else if (event.key === "Escape") {
+                document.sheetTable.setLocator();
+                this.blur();
+            }
+        });
+        // textedit's listener
+        this.textedit.addEventListener("keyup", function (event) {
+            if (event.key === "Enter") {
+                document.sheetTable.editCell();
+                this.blur();
+                //sheetTable.selectNext();
+            } else if (event.key === "Escape") {
+                document.sheetTable.setLocator();
+                this.blur();
+                document.sheetTable.disableButtons();
+            }
+        });
+        this.textedit.addEventListener("input", function () {
+            document.sheetTable.syncTextEdit();
+        });
+        this.textedit.addEventListener("focusin", function () {
+            document.sheetTable.enableButton(document.sheetTable.checkBtn);
+            document.sheetTable.enableButton(document.sheetTable.crossBtn);
+            document.sheetTable.enableButton(document.sheetTable.fxBtn);
+            document.sheetTable.syncTextEdit();
+        });
+
+    };
 
     // when click cancel button
     clickCross(button) {
@@ -812,10 +814,9 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     disableButtons() { // disable 3 buttons that controls the editing of a cell
-        let sheetTable = this;
-        sheetTable.disableButton(sheetTable.checkBtn);
-        sheetTable.disableButton(sheetTable.crossBtn);
-        sheetTable.disableButton(sheetTable.fxBtn);
+        this.disableButton(this.checkBtn);
+        this.disableButton(this.crossBtn);
+        this.disableButton(this.fxBtn);
     }
 
     setLocator() { // to make cell editable
@@ -837,75 +838,74 @@ class SheetTable { // data structure to present spreadsheet
         divCell.innerText = this.textedit.value;
     }
 
-    getTableCells() { // make indexes of all cells
-        let buttons = [];
+    #parseTableCells = () => { // make indexes of all cells
+        // let buttons = [];
         for (let i = 1; i <= this.sheet.rowNum; i++) {
-            let row = [];
+            // let row = [];
             for (let j = 0; j < this.sheet.colNum; j++) {
-                let letter = this.sheet.index2letter(j);
+                let letter = Sheet.index2letter(j);
                 let cell = document.getElementById(letter + '-cell-' + i);
                 cell.parentElement.addEventListener("click", () => {
-                    this.select(i, letter);
+                    this.#select(i, letter);
                 });
                 cell.parentElement.addEventListener("dblclick", () => {
-                    this.select(i, letter);
+                    this.#select(i, letter);
                     this.textedit.focus();
                 });
                 cell.setAttribute('title', this.sheet.getCell(i, letter).getValue());
                 this.sheet.getCell(i, letter).cell = cell;
-                row.push(cell);
+                // row.push(cell);
             }
-            buttons.push(row);
+            // buttons.push(row);
         }
-        return buttons;
-    }
+        // return buttons;
+    };
 
-    getRowButtons() { // make row buttons able to select a row
+    #getRowButtons = () => { // make row buttons able to select a row
         let res = [];
         for (let i = 1; i <= this.sheet.rowNum; i++) {
             let btn = document.getElementById('row-btn-' + i);
-
             btn.addEventListener("click", () => {
-                this.selectRow(i);
+                this.#selectRow(i);
             });
             res.push(btn);
         }
         return res;
-    }
+    };
 
-    getColButtons() { // make column buttons able to select a column
+    #getColButtons = () => { // make column buttons able to select a column
         let res = [];
         for (let i = 0; i < this.sheet.colNum; i++) {
-            let letter = this.sheet.index2letter(i);
+            let letter = Sheet.index2letter(i);
             let btn = document.getElementById('col-btn-' + letter);
             btn.addEventListener("click", () => {
-                this.selectCol(letter);
+                this.#selectCol(letter);
             });
             res.push(btn);
         }
         return res;
-    }
+    };
 
-    toggleSelect(x, y) { // switch & visualize selection of a cell
+    #toggleSelect = (x, y) => { // switch & visualize selection of a cell
         let cell = document.getElementById(y + '-cell-' + x).parentElement;
         let col = document.getElementById('col-btn-' + y).parentElement;
         let row = document.getElementById('row-btn-' + x);
         col.classList.toggle('selected-row-col');
         row.classList.toggle('selected-row-col');
         cell.classList.toggle('selected-cell');
-    }
+    };
 
-    select(x, y) { // select
-        this.unselect();
+    #select = (x, y) => { // select
+        this.#unselect();
         this.x = x;
         this.y = y;
-        this.toggleSelect(x, y);
+        this.#toggleSelect(x, y);
         this.flags = [false, false];
         this.setLocator();
-    }
+    };
 
-    selectRow(x) {
-        this.unselect();
+    #selectRow = (x) => {
+        this.#unselect();
         this.colBtns.forEach((btn) => {
             btn.parentElement.classList.add('selected-row-col');
         });
@@ -913,7 +913,7 @@ class SheetTable { // data structure to present spreadsheet
         row.classList.add('selected-row-col');
         for (let j = 0; j < this.sheet.colNum; j++) {
             let cell = document.getElementById(
-                this.sheet.index2letter(j) + '-cell-' + x)
+                Sheet.index2letter(j) + '-cell-' + x)
                 .parentElement;
             cell.classList.add('selected-cell');
         }
@@ -921,10 +921,10 @@ class SheetTable { // data structure to present spreadsheet
         this.y = 'A';
         this.flags = [true, false];
         this.setLocator();
-    }
+    };
 
-    selectCol(y) {
-        this.unselect();
+    #selectCol = (y) => {
+        this.#unselect();
         this.rowBtns.forEach((btn) => {
             btn.classList.add('selected-row-col');
         });
@@ -940,10 +940,10 @@ class SheetTable { // data structure to present spreadsheet
         this.y = y;
         this.flags = [false, true];
         this.setLocator();
-    }
+    };
 
     selectAll() { // select & visualize all cells/row/column buttons
-        this.unselect();
+        this.#unselect();
         this.rowBtns.forEach((btn) => {
             btn.classList.add('selected-row-col');
         });
@@ -953,7 +953,7 @@ class SheetTable { // data structure to present spreadsheet
         for (let i = 1; i <= this.sheet.rowNum; i++) {
             for (let j = 0; j < this.sheet.colNum; j++) {
                 let cell = document.getElementById(
-                    this.sheet.index2letter(j) + '-cell-' + i)
+                    Sheet.index2letter(j) + '-cell-' + i)
                     .parentElement;
                 cell.classList.add('selected-cell');
             }
@@ -964,7 +964,7 @@ class SheetTable { // data structure to present spreadsheet
         this.setLocator();
     }
 
-    unselect() { // un-visualize a selection to visualize a new selection
+    #unselect = () => { // un-visualize a selection to visualize a new selection
         this.setLocator();
         if (this.flags[0] === true) {
             if (this.flags[1] === true) {
@@ -978,7 +978,7 @@ class SheetTable { // data structure to present spreadsheet
                 for (let i = 1; i <= this.sheet.rowNum; i++) {
                     for (let j = 0; j < this.sheet.colNum; j++) {
                         let cell = document.getElementById(
-                            this.sheet.index2letter(j) + '-cell-' + i)
+                            Sheet.index2letter(j) + '-cell-' + i)
                             .parentElement;
                         cell.classList.remove('selected-cell');
                     }
@@ -992,7 +992,7 @@ class SheetTable { // data structure to present spreadsheet
                 row.classList.remove('selected-row-col');
                 for (let j = 0; j < this.sheet.colNum; j++) {
                     let cell = document.getElementById(
-                        this.sheet.index2letter(j) + '-cell-' + this.x)
+                        Sheet.index2letter(j) + '-cell-' + this.x)
                         .parentElement;
                     cell.classList.remove('selected-cell');
                 }
@@ -1024,7 +1024,7 @@ class SheetTable { // data structure to present spreadsheet
                 cell.classList.remove('selected-cell');
             }
         }
-    }
+    };
 
     editCell() { //auto set content in the cell
         let value = this.textedit.value;
@@ -1032,27 +1032,26 @@ class SheetTable { // data structure to present spreadsheet
             if (value.charAt(0) === '=' && value.length > 1) {
                 // replace all spaces and convert to uppercase
                 let formula = value.replace(/\s+/g, '').toUpperCase();
-                this.updateCell(formula, '?');
+                this.#updateCell(formula, '?');
             } else {
-                this.updateCell(null, value);
+                this.#updateCell(null, value);
             }
         } else {
-            this.updateCell(null, "");
+            this.#updateCell(null, "");
         }
     }
 
     locate() { // when input a new cell label & try to locate
-        let cell = this.sheet.getCell(1, 'A');
-        let label = cell.convertLabel(this.locator.value);
+        let label = Sheet.convertLabel(this.locator.value);
 
         if (label.length === 0) {
             alert('Wrong Pattern!');
             this.setLocator();
         } else {
             let x = label[0], y = label[1];
-            let yCode = this.sheet.letter2index(y);
+            let yCode = Sheet.letter2index(y);
             if (x > 0 && x <= this.sheet.rowNum && yCode >= 0 && yCode < this.sheet.colNum) {
-                this.select(x, y);
+                this.#select(x, y);
             } else {
                 alert('Out of Bound!');
                 this.setLocator();
@@ -1060,14 +1059,10 @@ class SheetTable { // data structure to present spreadsheet
         }
     }
 
-    queryCell(id) {
-        return this.sheet.getCellByID(id);
-    }
-
     addRow() {// add row before/at
         this.sheet.addRow(this.x - 1);
         this.writeTable();
-        this.select(this.x + 1, this.y);
+        this.#select(this.x + 1, this.y);
     }
 
     addRowAfter() {// add row after
@@ -1076,11 +1071,11 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     addColumn() {// add column left/at
-        let f = this.sheet.index2letter;
-        let g = this.sheet.letter2index;
+        let f = Sheet.index2letter;
+        let g = Sheet.letter2index;
         this.sheet.addColumn(this.y);
         this.writeTable();
-        this.select(this.x, f(1 + g(this.y)));
+        this.#select(this.x, f(1 + g(this.y)));
     }
 
     addColumnAfter() {//add column right
@@ -1103,31 +1098,31 @@ class SheetTable { // data structure to present spreadsheet
             alert('You cannot delete the only column!');//you cannot delete the only cell
         } else if (confirm("Are you sure to delete Row " + this.y + " ?")) {
             this.sheet.delColumn(this.y);
-            this.y = this.sheet.letter2index(this.y) > 0 ?
-                this.sheet.index2letter(this.sheet.letter2index(this.y) - 1) : this.y;
+            this.y = Sheet.letter2index(this.y) > 0 ?
+                Sheet.index2letter(Sheet.letter2index(this.y) - 1) : this.y;
             this.writeTable();
         }
     }
 
-    writeRowBar() { // write buttons at the most left
+    #writeRowBar = () => { // write buttons at the most left
         let str = "";
         for (let i = -1; i < this.sheet.rowNum; i++) {
             str += '<button class="button sheet-button row-button" id="row-btn-' + (i + 1) + '">' + (i + 1) + '</button>';
         }
         this.rowBar.innerHTML = str;
         //console.log(str);
-    }
+    };
 
-    writeColBar() { // write buttons at the most top & fake 1st row (hidden)
+    #writeColBar = () => { // write buttons at the most top & fake 1st row (hidden)
         let str = '<tr class="bg-lightgray">';
         let str2 = '<tr class="bg-lightgray">';
         for (let i = 0; i < this.sheet.colNum; i++) {
             let temp = '<td><button class="button sheet-button column-button" id="col-btn-'
-                + this.sheet.index2letter(i) + '">'
-                + this.sheet.index2letter(i) + '</button></td>';
+                + Sheet.index2letter(i) + '">'
+                + Sheet.index2letter(i) + '</button></td>';
             let temp2 = '<td><button class="button sheet-button column-button" id="fake-col-btn-'
-                + this.sheet.index2letter(i) + '">'
-                + this.sheet.index2letter(i) + '</button></td>';
+                + Sheet.index2letter(i) + '">'
+                + Sheet.index2letter(i) + '</button></td>';
             str += temp;
             str2 += temp2;
         }
@@ -1135,11 +1130,11 @@ class SheetTable { // data structure to present spreadsheet
         str2 += '</tr>';
         this.colBar.innerHTML = str;
         return str2;
-    }
+    };
 
     writeTable() { // write the whole table
-        this.writeRowBar();
-        let innerStr = this.writeColBar();
+        this.#writeRowBar();
+        let innerStr = this.#writeColBar();
         let sheet = this.sheet;
         let board = sheet.board;
         for (let i = 0; i < sheet.rowNum; i++) {
@@ -1147,25 +1142,25 @@ class SheetTable { // data structure to present spreadsheet
             for (let j = 0; j < sheet.colNum; j++) {
                 let cell = board[i][j];
                 temp += '<td class="cell-td"><div class="cell-div" ' +
-                    'id="' + sheet.index2letter(j) + '-cell-' + (i + 1) + '">' + cell.getValue() + '</div></td>';
+                    'id="' + Sheet.index2letter(j) + '-cell-' + (i + 1) + '">' + cell.getValue() + '</div></td>';
             }
             temp += '</tr>';
             innerStr += temp;
         }
 
         this.table.innerHTML = innerStr;
-        this.flushButtons();
+        this.#flushButtons();
         this.setLocator();
     }
 
-    flushButtons() { // rewrite buttons/cells generated by code
-        this.rowBtns = this.getRowButtons();
-        this.colBtns = this.getColButtons();
-        this.tableCells = this.getTableCells();
-        this.select(this.x, this.y);
-    }
+    #flushButtons = () => { // rewrite buttons/cells generated by code
+        this.rowBtns = this.#getRowButtons();
+        this.colBtns = this.#getColButtons();
+        this.#parseTableCells();
+        this.#select(this.x, this.y);
+    };
 
-    updateCell(formula, val) { // update cell's content
+    #updateCell = (formula, val) => { // update cell's content
         this.sheet.updateCell(this.x, this.y, val, formula);
         let sheetCell = this.sheet.getCell(this.x, this.y);
         let cell = sheetCell.cell;
@@ -1173,7 +1168,7 @@ class SheetTable { // data structure to present spreadsheet
         cell.innerText = value;
         cell.setAttribute('title', value);
         this.setLocator();
-    }
+    };
 
     // when importing values from csv file
     importCell(x, y, val) {
@@ -1207,10 +1202,11 @@ const createAndDownloadFile = (fileName, content) => {
     let aTag = document.createElement('a');
     let blob = new Blob([`\ufeff${content}`], {type: 'text/plain;charset=utf-8'});
     // let blob = new Blob([content]);
+    const obj = URL.createObjectURL(blob);
     aTag.download = fileName;
-    aTag.href = URL.createObjectURL(blob);
+    aTag.href = obj;
     aTag.click();
-    URL.revokeObjectURL(blob);
+    URL.revokeObjectURL(obj); // cancel blob's reference
 };
 
 // convert csv content string to an array
@@ -1321,8 +1317,8 @@ const syncScroll = () => {
 };
 
 // new spreadsheet
-const newSpreadsheet = function (row = 64, col = 27) {
-    document.sheetTable = new SheetTable(row, col);
+const newSpreadsheet = function (row = 64, col = 27, addListeners = false) {
+    document.sheetTable = new SheetTable(row, col, addListeners);
 };
 
 // start a new spreadsheet
@@ -1348,7 +1344,15 @@ const loadFile = (str) => {
         return;
     }
     let array = csv2array(str);
-    //console.log(array);
+    // get shape of array
+    const getArrayShape = (array) => {
+        let row = array.length;
+        let col = -1;
+        array.forEach((subArray) => {
+            col = Math.max(subArray.length, col);
+        });
+        return [row, col];
+    };
     let shape = getArrayShape(array);
     if (shape[0] < 1 || shape[1] < 1) {
         alert('Invalid File!');
@@ -1359,27 +1363,18 @@ const loadFile = (str) => {
     for (let i = 1; i <= shape[0]; i++) {
         let arr = array[i - 1];
         for (let j = 0; j < arr.length; j++) {
-            const letter = tbl.sheet.index2letter(j);
+            const letter = Sheet.index2letter(j);
             tbl.importCell(i, letter, arr[j].replace(/\r?\n|\r/g, ', '));
             // avoid new line
             //console.log('Processing ' + letter + i);
         }
     }
     //tbl.addListeners();
-    tbl.select(1, 'A');
+    //tbl.select(1, 'A');
 };
 
-// get shape of array
-const getArrayShape = (array) => {
-    let row = array.length;
-    let col = -1;
-    array.forEach((subArray) => {
-        col = Math.max(subArray.length, col);
-    });
-    return [row, col];
-};
 
-newSpreadsheet();
+newSpreadsheet(64, 27, true);
 syncScroll();
 
 // const testFunction2 = () => {
