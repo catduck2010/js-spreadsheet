@@ -14,7 +14,7 @@ Array.prototype.remove = function (index) {
 };
 
 // generate a pseudo-GUID/UUID by concatenating random hexadecimal
-Math.uuid = function () {
+Math.uuid = () => {
     // generate four random hex digits
     const S4 = () => (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
     return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
@@ -118,42 +118,43 @@ class RefTree {
 
     #rxjsUpdateValFormulas = () => {
         // refactored version
-        let arrows = [];
-        let orders = [];
-        let visited = new Map();
-        const dfs = (node) => {
-            if (!visited.has(node)) { // not visited
-                visited.set(node, 1); // visiting
-                let cells = this.graph.get(node);
-                if (cells !== undefined && cells != null && cells.length > 0) {
-                    cells.forEach((cell) => {
-                        // for testing
-                        arrows.push(node.label + " -> " + cell.label);
-                        dfs(cell);
-                    });
-                }
-                orders.push(node);
-                //node.refreshFormula(this.cellMap);
-                //console.log('Refreshed ' + node.label);
-                visited.set(node, -1);// visited
-            }
-        };
-        for (let node of this.graph.keys()) {
-            dfs(node);
-        }
-
-        const cellObservable = from(orders);
-
-        let refreshed = [];
-        cellObservable // only refresh those cells
-            .pipe(filter(obj => obj instanceof SheetCell)) // who has to be a cell
-            .pipe(filter(cell => cell.formulaR != null)) // and who has a formula
-            .subscribe(cell => {
-                cell.refreshFormula(this.cellMap);
-                refreshed.push(cell.getLabel());
-            });
-
         if (this.graph.size !== 0) {
+            let arrows = [];
+            let orders = [];
+            let visited = new Map();
+            const dfs = (node) => {
+                if (!visited.has(node)) { // not visited
+                    visited.set(node, 1); // visiting
+                    let cells = this.graph.get(node);
+                    if (cells !== undefined && cells != null && cells.length > 0) {
+                        cells.forEach((cell) => {
+                            // for testing
+                            arrows.push(node.label + " -> " + cell.label);
+                            dfs(cell);
+                        });
+                    }
+                    orders.push(node);
+                    //node.refreshFormula(this.cellMap);
+                    //console.log('Refreshed ' + node.label);
+                    visited.set(node, -1);// visited
+                }
+            };
+            for (let node of this.graph.keys()) {
+                dfs(node);
+            }
+
+            const cellObservable = from(orders);
+
+            let refreshed = [];
+            cellObservable // only refresh those cells
+                .pipe(filter(obj => obj instanceof SheetCell)) // who has to be a cell
+                .pipe(filter(cell => cell.formulaR != null)) // and who has a formula
+                .subscribe(cell => {
+                    cell.refreshFormula(this.cellMap);
+                    refreshed.push(cell.getLabel());
+                });
+
+
             console.log('Reference Graph: ' + arrows.join(', '));
             console.log('Refresh Order: ' + refreshed.join(','));
         }
@@ -217,15 +218,14 @@ class SheetCell {
     // input [cell1, cell2]
     // do sum of cell1:cell2
     calcSumPair(pair) {
-        const sheet = document.sheetTable.sheet;
-        return sheet.calcSum(sheet.expandSumReference(
+        return Sheet.calcSum(Sheet.expandSumReference(
             pair[0].label,
             pair[1].label
         ));
     }
 
     refreshFormula(map) { // AUTOMATICALLY refresh formula
-        if (this.formula !== null) {
+        if (this.formulaR !== null) {
             let res = this.formulaR;
             let flag = false; // if the cell is deleted
             // refresh sum reference
@@ -344,6 +344,48 @@ class Sheet { // spreadsheet data structure
             res = [x, y];
         }
         return res;
+    };
+
+    // directly calculate all cells' sum in an array
+    static calcSum = (cells) => {
+        let sum = 0;
+        cells.forEach(cell => {
+            if (cell.isNum) {
+                sum += cell.getValue();
+            } else {
+                throw new Error('An invalid number at ' + cell.label + '!');
+            }
+        });
+        return sum;
+    };
+
+    // input label1 & label2 and return all cells that bound in the 2 labels
+    static expandSumReference = (label1, label2) => {
+        const convertSumReference = (labels) => { // return cells queried by an array of labels
+            let cells = [];
+            labels.forEach((lbl) => {
+                cells.push(document.sheetTable.sheet.getCellByLabel(lbl));
+            });
+            return cells;
+        };
+        let labels = [];
+        let index1 = Sheet.convertLabel(label1);
+        let index2 = Sheet.convertLabel(label2);
+        for (let i = 0; i < 2; i++) { // index1 < index2
+            if (index1[i] > index2[i]) {
+                const temp = index1[i];
+                index1[i] = index2[i];
+                index2[i] = temp;
+            }
+        }
+        for (let i = index1[0]; i <= index2[0]; i++) {
+            for (let j = Sheet.letter2index(index1[1]);
+                 j <= Sheet.letter2index(index2[1]);
+                 j++) {
+                labels.push(Sheet.index2letter(j) + i);
+            }
+        }
+        return convertSumReference(labels);
     };
 
     // convert sheet data to string (for export)
@@ -619,7 +661,7 @@ class Sheet { // spreadsheet data structure
                                 throw new Error('Something Wrong when replacing references!');
                             } else {
                                 modifiedFormula = modifiedFormula.replace("{-S-}",
-                                    '' + this.calcSum(this.expandSumReference(
+                                    '' + Sheet.calcSum(Sheet.expandSumReference(
                                     pair[0].label,
                                     pair[1].label
                                     )));
@@ -661,7 +703,7 @@ class Sheet { // spreadsheet data structure
     #expandAllColonReference = (sumRefs) => {
         let cells = [];
         sumRefs.forEach((pair) => {
-            let refs = this.expandSumReference(pair[0].label, pair[1].label);
+            let refs = Sheet.expandSumReference(pair[0].label, pair[1].label);
             refs.forEach((cell) => {
                 cells.push(cell);
             });
@@ -669,49 +711,6 @@ class Sheet { // spreadsheet data structure
         return cells;
     };
 
-    // directly calculate all cells' sum in an array
-    calcSum(cells) {
-        let sum = 0;
-        cells.forEach(cell => {
-            if (cell.isNum) {
-                sum += cell.getValue();
-            } else {
-                throw new Error('An invalid number at ' + cell.label + '!');
-            }
-        });
-        return sum;
-    }
-
-    // input label1 & label2 and return all cells that bound in the 2 labels
-    expandSumReference(label1, label2) {
-        let labels = [];
-        let index1 = Sheet.convertLabel(label1);
-        let index2 = Sheet.convertLabel(label2);
-        for (let i = 0; i < 2; i++) { // index1 < index2
-            if (index1[i] > index2[i]) {
-                const temp = index1[i];
-                index1[i] = index2[i];
-                index2[i] = temp;
-            }
-        }
-        for (let i = index1[0]; i <= index2[0]; i++) {
-            for (let j = Sheet.letter2index(index1[1]);
-                 j <= Sheet.letter2index(index2[1]);
-                 j++) {
-                labels.push(Sheet.index2letter(j) + i);
-            }
-        }
-        return this.convertSumReference(labels);
-    }
-
-    // return cells queried by an array of labels
-    convertSumReference(labels) {
-        let cells = [];
-        labels.forEach((lbl) => {
-            cells.push(this.getCellByLabel(lbl));
-        });
-        return cells;
-    }
 }
 
 class SheetTable { // data structure to present spreadsheet
@@ -819,7 +818,7 @@ class SheetTable { // data structure to present spreadsheet
         this.disableButton(this.fxBtn);
     }
 
-    setLocator() { // to make cell editable
+    setLocator() { // reset locator, cell value, formula bar value
         this.locator.value = this.y + this.x;
         let cell = this.sheet.getCell(this.x, this.y);
         if (cell.formula !== null) {
@@ -1297,18 +1296,18 @@ const ORA = (num = 24) => {
 const syncScroll = () => {
     let down = document.querySelector('#sheet-div');
     let up = document.querySelector('#new-col-bar');
-    const syncUp = function () {
+    const syncUp = () => {
         down.scrollLeft = up.scrollLeft;
     };
-    const syncDown = function () {
+    const syncDown = () => {
         up.scrollLeft = down.scrollLeft;
     };
     // only preserve one listener to improve scrolling performance
-    up.addEventListener('mouseover', function () {
+    up.addEventListener('mouseover', () => {
         down.removeEventListener('scroll', syncDown);
         up.addEventListener('scroll', syncUp);
     });
-    down.addEventListener('mouseover', function () {
+    down.addEventListener('mouseover', () => {
         up.removeEventListener('scroll', syncUp);
         down.addEventListener('scroll', syncDown);
     });
@@ -1339,65 +1338,45 @@ const openFile = () => {
 
 // load csv content string to an array
 const loadFile = (str) => {
-    if (str.length < 1) {
-        alert('Something Wrong Happened~');
-        return;
-    }
-    let array = csv2array(str);
-    // get shape of array
     const getArrayShape = (array) => {
         let row = array.length;
         let col = -1;
         array.forEach((subArray) => {
             col = Math.max(subArray.length, col);
         });
+        if (row < 1 || col < 1) {
+            throw new Error('Invalid File!');
+        }
         return [row, col];
     };
-    let shape = getArrayShape(array);
-    if (shape[0] < 1 || shape[1] < 1) {
-        alert('Invalid File!');
-        return;
-    }
-    newSpreadsheet(shape[0], shape[1]);
-    let tbl = document.sheetTable;
-    for (let i = 1; i <= shape[0]; i++) {
-        let arr = array[i - 1];
-        for (let j = 0; j < arr.length; j++) {
-            const letter = Sheet.index2letter(j);
-            tbl.importCell(i, letter, arr[j].replace(/\r?\n|\r/g, ', '));
-            // avoid new line
-            //console.log('Processing ' + letter + i);
+    if (str.length > 0) { // string's length > 0
+        try {
+            let array = csv2array(str);
+            // get shape of array
+
+            const [row, col] = getArrayShape(array);
+
+            newSpreadsheet(row, col);
+            let tbl = document.sheetTable;
+            for (let i = 1; i <= row; i++) {
+                let arr = array[i - 1];
+                for (let j = 0; j < arr.length; j++) {
+                    const letter = Sheet.index2letter(j);
+                    tbl.importCell(i, letter, arr[j].replace(/\r?\n|\r/g, ', '));
+                    // avoid new line
+                    //console.log('Processing ' + letter + i);
+                }
+            }
+        } catch (e) {
+            alert(e);
         }
+    } else {
+        alert('Content of input file is empty!');
     }
+
     //tbl.addListeners();
     //tbl.select(1, 'A');
 };
 
-
 newSpreadsheet(64, 27, true);
 syncScroll();
-
-// const testFunction2 = () => {
-//     class TestCell {
-//         constructor(label) {
-//             this.label = label;
-//         }
-//     }
-//
-//     let cells = [];
-//     for (let i = 1; i <= 10; i++) {
-//         cells.push(new TestCell('A' + i));
-//     }
-//
-//     const ob = rxjs.Observable.create(function (observer) {
-//         cells.forEach((cell) => {
-//             observer.next(cell)
-//         });
-//     });
-//
-//     ob.subscribe(cell => console.log(cell.label));
-// };
-
-
-
-
