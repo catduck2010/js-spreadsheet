@@ -742,8 +742,10 @@ class SheetTable { // data structure to present spreadsheet
         this.rowBar = document.getElementById('left-row-bar');
         this.colBar = document.getElementById('sticky-col-bar');
         this.table = document.getElementById('sheet-table');
+        this.tempEdit = null;
         this.rowBtns = null;
         this.colBtns = null;
+
         // this.tableCells = null;
 
         this.writeTable();
@@ -779,13 +781,39 @@ class SheetTable { // data structure to present spreadsheet
         this.textedit.addEventListener("input", function () {
             document.sheetTable.syncTextEdit();
         });
-        this.textedit.addEventListener("focusin", function () {
+        this.textedit.addEventListener("focusin", () => {
             document.sheetTable.enableButton(document.sheetTable.checkBtn);
             document.sheetTable.enableButton(document.sheetTable.crossBtn);
             document.sheetTable.enableButton(document.sheetTable.fxBtn);
+            this.#createTempEdit();
             document.sheetTable.syncTextEdit();
         });
+    };
 
+    // create an input node to edit in cell
+    #createTempEdit = () => {
+        if (this.tempEdit == null) {
+            let cell = this.sheet.getCell(this.x, this.y);
+            let cellDiv = cell.cell;
+            let text = (cell.formulaR != null) ? cell.formula : cell.getValue();
+            const id = 'input-' + cell.label;
+            cellDiv.classList.add('cell-div-toggle');
+            cellDiv.insertAdjacentHTML("afterend",
+                '<input id="' + id + '" type="text" class="temp-edit" value="' + text + '">');
+            this.tempEdit = document.getElementById(id);
+            this.tempEdit.addEventListener("input", () => {
+                this.textedit.value = this.tempEdit.value;
+            });
+            this.tempEdit.addEventListener("keyup", (event) => {
+                if (event.key === "Enter") {
+                    document.sheetTable.editCell();
+                    //sheetTable.selectNext();
+                } else if (event.key === "Escape") {
+                    document.sheetTable.setLocator();
+                    document.sheetTable.disableButtons();
+                }
+            });
+        }
     };
 
     // when click cancel button
@@ -829,6 +857,12 @@ class SheetTable { // data structure to present spreadsheet
     }
 
     setLocator() { // reset locator, cell value, formula bar value
+        // close temp edit input
+        if (this.tempEdit != null) {
+            this.sheet.getCell(this.x, this.y).cell.classList.remove('cell-div-toggle');
+            this.tempEdit.remove();
+            this.tempEdit = null;
+        }
         this.locator.value = this.y + this.x;
         let cell = this.sheet.getCell(this.x, this.y);
         if (cell.formula !== null) {
@@ -845,6 +879,7 @@ class SheetTable { // data structure to present spreadsheet
     syncTextEdit() {
         let divCell = this.sheet.getCell(this.x, this.y).cell;
         divCell.innerText = this.textedit.value;
+        if (this.tempEdit != null) this.tempEdit.value = this.textedit.value;
     }
 
     #parseTableCells = () => { // make indexes of all cells
@@ -854,12 +889,16 @@ class SheetTable { // data structure to present spreadsheet
             for (let j = 0; j < this.sheet.colNum; j++) {
                 let letter = Sheet.index2letter(j);
                 let cell = document.getElementById(letter + '-cell-' + i);
-                cell.parentElement.addEventListener("click", () => {
-                    this.#select(i, letter);
+                cell.parentElement.addEventListener("click", (event) => {
+                    if (event.target !== this.tempEdit) this.#select(i, letter);
                 });
                 cell.parentElement.addEventListener("dblclick", () => {
                     this.#select(i, letter);
-                    this.textedit.focus();
+                    this.#createTempEdit();
+                    document.sheetTable.enableButton(document.sheetTable.checkBtn);
+                    document.sheetTable.enableButton(document.sheetTable.crossBtn);
+                    document.sheetTable.enableButton(document.sheetTable.fxBtn);
+                    this.tempEdit.focus();
                 });
                 cell.setAttribute('title', this.sheet.getCell(i, letter).getValue());
                 this.sheet.getCell(i, letter).cell = cell;
@@ -1036,6 +1075,12 @@ class SheetTable { // data structure to present spreadsheet
     };
 
     editCell() { //auto set content in the cell
+        // remove temp edit input
+        if (this.tempEdit != null) {
+            this.sheet.getCell(this.x, this.y).cell.classList.remove('cell-div-toggle');
+            this.tempEdit.remove();
+            this.tempEdit = null;
+        }
         let value = this.textedit.value;
         if (value.length > 0) {
             if (value.charAt(0) === '=' && value.length > 1) {
