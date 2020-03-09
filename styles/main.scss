@@ -309,6 +309,7 @@ table {
 
 .table-head {
   margin: 0 10px;
+  background: gray;
 }
 
 .table-cell {
@@ -373,9 +374,9 @@ table {
 }
 
 .temp-edit {
-  width: 96%;
+  width: 86px;
   height: 100%;
   margin: 0;
   padding: 0;
- // display: none;
+  // display: none;
 }

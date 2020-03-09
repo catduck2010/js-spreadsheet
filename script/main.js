@@ -348,14 +348,16 @@ class Sheet { // spreadsheet data structure
 
     // directly calculate all cells' sum in an array
     static calcSum = (cells) => {
-        let sum = 0;
+        let sum = 0, count = 0;
         cells.forEach(cell => {
             if (cell.isNum) {
                 sum += cell.getValue();
+                count++;
             } else {
                 throw new Error('An invalid number at ' + cell.label + '!');
             }
         });
+        // console.log('Cells: ' + count);
         return sum;
     };
 
@@ -468,7 +470,7 @@ class Sheet { // spreadsheet data structure
 
     checkLabel(label) {
         let [row, col] = Sheet.convertLabel(label);
-        return !(row >= this.rowNum || Sheet.letter2index(col) >= this.colNum);// false: out of bound
+        return !(row > this.rowNum || Sheet.letter2index(col) >= this.colNum);// false: out of bound
     }
 
     getCellReference(cell, formula) {
@@ -785,13 +787,13 @@ class SheetTable { // data structure to present spreadsheet
             document.sheetTable.enableButton(document.sheetTable.checkBtn);
             document.sheetTable.enableButton(document.sheetTable.crossBtn);
             document.sheetTable.enableButton(document.sheetTable.fxBtn);
-            this.#createTempEdit();
+            document.sheetTable.createTempEdit();
             document.sheetTable.syncTextEdit();
         });
     };
 
     // create an input node to edit in cell
-    #createTempEdit = () => {
+    createTempEdit = () => {
         if (this.tempEdit == null) {
             let cell = this.sheet.getCell(this.x, this.y);
             let cellDiv = cell.cell;
@@ -894,7 +896,7 @@ class SheetTable { // data structure to present spreadsheet
                 });
                 cell.parentElement.addEventListener("dblclick", () => {
                     this.#select(i, letter);
-                    this.#createTempEdit();
+                    document.sheetTable.createTempEdit();
                     document.sheetTable.enableButton(document.sheetTable.checkBtn);
                     document.sheetTable.enableButton(document.sheetTable.crossBtn);
                     document.sheetTable.enableButton(document.sheetTable.fxBtn);
@@ -1422,6 +1424,8 @@ const loadFile = (str) => {
                     //console.log('Processing ' + letter + i);
                 }
             }
+            tbl.tempEdit = null;
+            tbl.setLocator();
         } catch (e) {
             alert(e);
         }
