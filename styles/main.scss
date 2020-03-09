@@ -266,6 +266,7 @@ table {
   grid-column: 2;
   overflow: auto;
 }
+
 // change cursor when pointing at cells
 .sheet-div td {
   cursor: crosshair;
@@ -331,6 +332,10 @@ table {
   text-overflow: ellipsis;
 }
 
+.cell-div-toggle {
+  display: none;
+}
+
 // make buttons unable to click
 .disabled-button {
   color: gray;
@@ -360,8 +365,17 @@ table {
 .selected-row-col > button:hover {
   color: black;
 }
+
 // highlight the selected cell
 .selected-cell {
   transition: 0.3s;
   background: rgba(142, 255, 32, 0.5);
+}
+
+.temp-edit {
+  width: 95%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+ // display: none;
 }
