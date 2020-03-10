@@ -1359,14 +1359,23 @@ const syncScroll = () => {
     const syncDown = () => {
         up.scrollLeft = down.scrollLeft;
     };
+    let mouseOverDown = null;
     // only preserve one listener to improve scrolling performance
     up.addEventListener('mouseover', () => {
-        down.removeEventListener('scroll', syncDown);
-        up.addEventListener('scroll', syncUp);
+        if (mouseOverDown !== false) {
+            mouseOverDown = false;
+            down.removeEventListener('scroll', syncDown);
+            // console.log('Gotcha UP');
+            up.addEventListener('scroll', syncUp);
+        }
     });
     down.addEventListener('mouseover', () => {
-        up.removeEventListener('scroll', syncUp);
-        down.addEventListener('scroll', syncDown);
+        if (mouseOverDown !== true) {
+            mouseOverDown = true;
+            up.removeEventListener('scroll', syncUp);
+            // console.log('Gotcha DOWN');
+            down.addEventListener('scroll', syncDown);
+        }
     });
     up.addEventListener('scroll', syncUp);
     down.addEventListener('scroll', syncDown);
