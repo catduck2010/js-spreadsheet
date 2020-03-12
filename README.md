@@ -1,6 +1,4 @@
-# Lihang Zhou's Assignment 6
-
-#### Lihang Zhou 001302072
+# Assignment 6
 
 <div align="center">
 	<img src="pics/za-warudo.gif" />
