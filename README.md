@@ -1,4 +1,4 @@
-# Assignment 6
+# Assignment 6 Spreadsheet
 
 <div align="center">
 	<img src="pics/za-warudo.gif" />
@@ -21,9 +21,9 @@
 * nodejs & npm;
 
 #### How To Run:
-1. `git clone` to local directory;
+1. `git clone` to local & navigate there;
 2. Run `npm install` to install dependencies;
-3. Rum `npm run-script build` to compile SCSS files to CSS file;
+3. Run `npm build` to compile SCSS files to CSS file;
 5. Double click `spreadsheet.html` to show webpage
 
 #### Assignment Descriptions:
