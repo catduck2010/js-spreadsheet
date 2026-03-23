@@ -9,16 +9,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/neu-mis-info6150-spring-2020/assignment-6-zhouliha.git"
+    "url": "git+https://github.com/catduck2010/js-spreadsheet.git"
   },
   "author": "Lihang Zhou",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/neu-mis-info6150-spring-2020/assignment-6-zhouliha/issues"
-  },
-  "homepage": "https://github.com/neu-mis-info6150-spring-2020/assignment-6-zhouliha#readme",
   "dependencies": {
-    "rxjs": "^6.5.4",
-    "sass": "^1.25.0"
+    "rxjs": "^6.6.7",
+    "sass": "^1.98.0"
   }
 }

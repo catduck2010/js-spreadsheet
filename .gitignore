@@ -26,4 +26,10 @@ bun.lockb
 .DS_Store
 Thumbs.db
 
+package-lock.json
+bun.lock
+*.lock
+.npmrc
+yarn.lock
+
 *.local.*
