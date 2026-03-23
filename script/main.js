@@ -273,6 +273,9 @@ class SheetCell {
                     cell.getValue());
             });
             //console.log('=' + modifiedFormula);
+            if (!/^[\d\s+\-*/().]+$/.test(modifiedFormula)) {
+                throw new Error('Invalid formula expression.');
+            }
             const calcVal = new Function('return ' + modifiedFormula + ';');
             this.setValue(calcVal());
         } catch (e) {
@@ -685,6 +688,9 @@ class Sheet { // spreadsheet data structure
 
                 console.log(modifiedFormula);
                 // calculate
+                if (!/^[\d\s+\-*/().]+$/.test(modifiedFormula)) {
+                    throw new Error('Invalid formula expression.');
+                }
                 const calcVal = new Function('return ' + modifiedFormula + ';');
                 let newVal = calcVal();
                 if (newVal != null) {
