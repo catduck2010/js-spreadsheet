@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "node_modules/.bin/sass styles/main.scss dist/main.css"
+    "build": "bunx sass styles/main.scss dist/main.css"
   },
   "repository": {
     "type": "git",
